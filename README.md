@@ -12,6 +12,7 @@ C64Gfx [-palette=<image>] -{type} <source image> [additional type params]
 where {type} is one of:
  * -columns: export custom columns (enter without params for info)
  * -textmc: multicolor text picture (enter without params for info)
+ * -texthires: hires text picture
  * -multisprite: export a large sprite cut up into hardware sprites (enter without params for info)
  * -bundle: combine font data for multiple screens into a single font
  * -texthires: hires text picture (enter without params for info)
