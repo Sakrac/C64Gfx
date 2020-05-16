@@ -877,16 +877,21 @@ int main( int argc, char* argv[] )
 
 	}
 
-	if( GetSwitch( "textmc", swtc, swtn ) ) {
-		if( argn < 5 ) { printf( "Usage:\nGfx -textmc <image> <bg> <col0> <col1> -out=<out>\n" ); return 0; }
+	if (GetSwitch("textmc", swtc, swtn)) {
+		if (argn < 5) { printf("Usage:\nGfx -textmc <image> <bg> <col0> <col1> -out=<out> [-wid=char width] [-hgt=char height] [-skip0]\n"); return 0; }
 
-		uint8_t cols[ 3 ] = { (uint8_t)atoi( args[ 2 ] ), (uint8_t)atoi( args[ 3 ] ), (uint8_t)atoi( args[ 4 ] ) };
+		uint8_t cols[3] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]) };
 
 		int w, h;
-		uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
+		uint8_t* img = LoadPicture(args[1], &w, &h);
 
 		int wc = w / 8;
 		int hc = h / 8;
+
+		const char* wid = GetSwitch("wid", swtc, swtn);
+		if( wid) { wc = atoi(wid); }
+		const char* hgt = GetSwitch("hgt", swtc, swtn);
+		if( hgt) { wc = atoi(hgt); }
 
 		uint8_t* screen = (uint8_t*)malloc( wc * hc );
 		uint8_t* chars = (uint8_t*)malloc( 256 * 8 );
