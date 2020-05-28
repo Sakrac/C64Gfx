@@ -874,11 +874,132 @@ int main( int argc, char* argv[] )
 			printf( "failed to open file %s\n", args[ 1 ] );
 			return 1;
 		}
+	}
 
+	if (GetSwitch("bitmapmc", swtc, swtn)) {
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> -out=<out> [-wid=char width] [-hgt=char height] [-rawcol]\n"); return 0; }
+
+		int w, h;
+		uint8_t* img = LoadPicture(args[1], &w, &h);
+		uint8_t bg = (uint8_t)atoi(args[2]);
+
+		int wc = w / 8;
+		int hc = h / 8;
+
+		const char* wid = GetSwitch("wid", swtc, swtn);
+		if (wid) { wc = atoi(wid); }
+		const char* hgt = GetSwitch("hgt", swtc, swtn);
+		if (hgt) { hc = atoi(hgt); }
+
+		uint8_t* bitnap = (uint8_t*)malloc(wc * hc * 8), *bo = bitnap;
+		uint8_t* screen = (uint8_t*)malloc(wc * hc), *so = screen;
+		uint8_t* color = (uint8_t*)malloc(wc * hc), *co = color;
+		// 00: bg, 01: >scr, 10: <scr, 11: col
+		uint8_t prevCol[3] = { 0, 0, 0 }; // previous set of colors
+
+		// prioritize background color 0, then 1 etc.
+		for (int y = 0; y < hc; ++y) {
+			for (int x = 0; x < wc; ++x) {
+				uint8_t* s = img + y * 8 * w + x * 8;
+				// get a histogram for the tile
+				uint8_t used[16];
+				uint8_t hist[16];
+				uint8_t num = 0;
+				for (int yp = 0; yp < 8; ++yp) {
+					for (int xp = 0; xp < 8; xp += 2) {
+						uint8_t c = s[xp + yp * w];
+						if (c != bg) {
+							uint8_t idx = num;
+							for (uint8_t i = 0; i < num; ++i) {
+								if (used[i] == c) { idx = i; break; }
+							}
+							if (idx == num) {
+								used[idx] = c;
+								hist[idx] = 1;
+								++num;
+							} else { hist[idx]++; }
+						}
+					}
+				}
+				uint8_t col[3] = { prevCol[0], prevCol[1], prevCol[2] };
+				for (uint8_t c = 0; c < num; ++c) {
+					uint8_t ti = 0, tv = 0;
+					for (uint8_t i = 0; i < num; ++i) {
+						if (hist[i] > tv) {
+							ti = i;
+							tv = hist[i];
+						}
+					}
+					hist[ti] = 0;
+					if (tv) { col[c] = used[ti]; }
+				}
+				for (int yp = 0; yp < 8; ++yp) {
+					uint8_t b = 0;
+					for (int xp = 0; xp < 8; xp += 2) {
+						uint8_t c = s[xp + yp * w];
+						b <<= 2;
+						if (c != bg) {
+							if (c == col[0]) { b |= 2; }
+							else if (c == col[1]) { b |= 1; }
+							else if (c == col[2]) { b |= 3; }
+						}
+					}
+					*bo++ = b;
+				}
+				*so++ = col[0] | (col[1] << 4);
+				*co++ = col[2];
+			}
+		}
+
+		const char* out = GetSwitch("out", swtc, swtn);
+		if (out) {
+			size_t outLen = strlen(out);
+			char file[_MAX_PATH];
+			const char* extChr = ".chr";
+			const char* extScr = ".scr";
+			const char* extCol = ".col";
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
+			FILE* f = fopen(file, "wb");
+			if (f) {
+				fwrite(bitnap, wc * hc * 8, 1, f);
+				fclose(f);
+			}
+
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
+			f = fopen(file, "wb");
+			if (f) {
+				fwrite(screen, wc * hc, 1, f);
+				fclose(f);
+			}
+
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extCol, sizeof(extCol) + 1);
+			f = fopen(file, "wb");
+			if (f) {
+				if (!GetSwitch("rawcol", swtc, swtn)) {
+					uint8_t* colSrc = color;
+					uint8_t* colDst = color;
+					for (int b = 0; b < (wc * hc); b += 2) {
+						*colDst++ = (colSrc[b] & 0xf) | (colSrc[b + 1] << 4);
+					}
+					fwrite(color, wc * hc / 2, 1, f);
+				} else {
+					fwrite(color, wc * hc, 1, f);
+				}
+				fclose(f);
+			}
+		}
+
+		free(color);
+		free(bitnap);
+		free(screen);
+		return 0;
 	}
 
 	if (GetSwitch("textmc", swtc, swtn)) {
-		if (argn < 5) { printf("Usage:\nGfx -textmc <image> <bg> <col0> <col1> -out=<out> [-wid=char width] [-hgt=char height] [-skip0]\n"); return 0; }
+		if (argn < 5) { printf("Usage:\nGfx -textmc <image> <bg> <col0> <col1> -out=<out> [-wid=char width] [-hgt=char height] [-skip0] [-rawcol]\n"); return 0; }
 
 		uint8_t cols[3] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]) };
 
@@ -891,7 +1012,7 @@ int main( int argc, char* argv[] )
 		const char* wid = GetSwitch("wid", swtc, swtn);
 		if( wid) { wc = atoi(wid); }
 		const char* hgt = GetSwitch("hgt", swtc, swtn);
-		if( hgt) { wc = atoi(hgt); }
+		if( hgt) { hc = atoi(hgt); }
 
 		uint8_t* screen = (uint8_t*)malloc( wc * hc );
 		uint8_t* chars = (uint8_t*)malloc( 256 * 8 );
