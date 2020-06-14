@@ -712,7 +712,7 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "columns", swtc, swtn ) )
 	{
-		if( argn < 5 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11]\n" ); return 0; }
+		if( argn < 5 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11] [-oc=col]\n" ); return 0; }
 		int w, h;
 		uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
 
@@ -723,6 +723,9 @@ int main( int argc, char* argv[] )
 		uint8_t bg = ( uint8_t )strtoul( args[ 3 ], &endStr, 10 );
 		uint8_t mc[3] = { 1, 2, 3 };
 
+		uint8_t oc = 0xff;
+		const char* outlineColor = GetSwitch("oc", swtc, swtn);
+		if (outlineColor) { oc = (uint8_t)atoi(outlineColor); }
 
 		int pad = 0;
 		const char* padStr = GetSwitch( "pad", swtc, swtn );
@@ -761,16 +764,24 @@ int main( int argc, char* argv[] )
 		if( h < ( countY * dimY ) ) { countY = h / dimY; }
 
 		uint8_t* buf = (uint8_t*)malloc(dimX * dimY * countX * countY + pad * countX * countY ), *out = buf;
+		uint8_t* bufOC = oc < 16 ? (uint8_t*)malloc(dimX * dimY * countX * countY + pad * countX * countY) : 0, *outOC = bufOC;
 
 		for( int row = 0; row < countY; ++row ) {
 			for( int col = 0; col < countX; ++col ) {
 				uint8_t* cell = img + row * dimY * w + col * dimX * 8;
 				for( int y = 0; y < dimY; ++y ) {
 					for( int xb = 0; xb < dimX; ++xb ) {
-						uint8_t b = 0;
+						uint8_t b = 0, bOC = 0;
+						if (oc < 16) {
+							for (int x = 0; x < 8; ++x) {
+								bOC <<= 1;
+								if (cell[x] == oc) { bOC |= 1; }
+							}
+						}
 						if (mcstr) {
 							for (int x = 0; x<8; x+=2) {
 								b <<= 2;
+								uint8_t c = cell[x]; if (c == oc) { c = cell[x + 1]; }
 								if (cell[x]==mc[0]) { b |= 1; }
 								else if (cell[x]==mc[1]) { b |= 2; }
 								else if (cell[x]==mc[2]) { b |= 3; }
@@ -778,15 +789,19 @@ int main( int argc, char* argv[] )
 						} else {
 							for (int x = 0; x<8; ++x) {
 								b <<= 1;
-								if (cell[x]!=bg) { b |= 1; }
+								if (cell[x]!=bg && cell[x]!=oc) { b |= 1; }
 							}
 						}
 						*out++ = b;
+						if (outOC) { *outOC++ = bOC; }
 						cell += 8;
 					}
 					cell += w - dimX*8;
 				}
-				for( int p = 0; p < pad; ++p ) { *out++ = 0; }
+				for (int p = 0; p < pad; ++p) {
+					*out++ = 0;
+					if (outOC) { *outOC++ = 0; }
+				}
 			}
 		}
 		FILE* f = fopen( args[ 2 ], "wb" );
@@ -795,6 +810,23 @@ int main( int argc, char* argv[] )
 			fclose( f );
 		} else { printf( "failed to open file \"%s\" for writing\n", args[2] ); return 1; }
 		free( buf );
+
+		if (bufOC) {
+			char name[_MAX_PATH];
+			const char* of = args[2];
+			size_t p = strlen(of);
+			while (p && of[p] != '.') { --p; }
+			if (!p) { p = strlen(of); }
+			memcpy(name, of, p);
+			memcpy(name + p, "_oc", 3);
+			memcpy(name + p + 3, of + p, strlen(of) + 1 - p);
+			if (fopen_s(&f, name, "wb") == 0) {
+				fwrite(bufOC, outOC - bufOC , 1, f);
+				fclose(f);
+			} else { printf("failed to write output to %s\n", name); return 3; }
+			free(bufOC);
+		}
+
 		return 0;
 	}
 
