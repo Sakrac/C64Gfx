@@ -158,7 +158,7 @@ char* GetSwitch( const char* match, char** swtc, int swtn )
 		if( _strnicmp( match, *swtc, l ) == 0 )
 		{
 			if( ( *swtc )[ l ] == '=' ) return *swtc + l + 1;
-			else return *swtc;
+			else if( !(*swtc)[l] ) return *swtc;
 		}
 		++swtc;
 		--swtn;
@@ -712,7 +712,10 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "columns", swtc, swtn ) )
 	{
-		if( argn < 5 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11] [-oc=col]\n" ); return 0; }
+		if( argn < 5 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11] [-oc=col] [-oci=col]\n"
+								 " * image: input\n * out: output\n * bg: background color\n * count: NxN or N number of frames\n"
+								 " * dim: NxN bytes X lines\n * -mc: multcolors for bit pairs 01, 10, 11\n"
+								 " * oc: outline sprite color, separate file\n * oci: outline sprite color, interleaved in same file\n"); return 0; }
 		int w, h;
 		uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
 
@@ -724,8 +727,16 @@ int main( int argc, char* argv[] )
 		uint8_t mc[3] = { 1, 2, 3 };
 
 		uint8_t oc = 0xff;
+		uint8_t oc_interleave = 0;
 		const char* outlineColor = GetSwitch("oc", swtc, swtn);
 		if (outlineColor) { oc = (uint8_t)atoi(outlineColor); }
+		else {
+			outlineColor = GetSwitch("oci", swtc, swtn);
+			if (outlineColor) {
+				oc = (uint8_t)atoi(outlineColor);
+				++oc_interleave;
+			}
+		}
 
 		int pad = 0;
 		const char* padStr = GetSwitch( "pad", swtc, swtn );
@@ -763,8 +774,14 @@ int main( int argc, char* argv[] )
 		if( wc < ( countX * dimX ) ) { countX = wc / dimX; }
 		if( h < ( countY * dimY ) ) { countY = h / dimY; }
 
-		uint8_t* buf = (uint8_t*)malloc(dimX * dimY * countX * countY + pad * countX * countY ), *out = buf;
-		uint8_t* bufOC = oc < 16 ? (uint8_t*)malloc(dimX * dimY * countX * countY + pad * countX * countY) : 0, *outOC = bufOC;
+		size_t frameBytes = dimX * dimY;
+		size_t numFrames = countX * countY;
+		size_t bufSize = (frameBytes + pad) * numFrames;
+		size_t alcSize = (oc < 16 && oc_interleave) ? (2 * bufSize) : bufSize;
+
+		uint8_t* buf = (uint8_t*)malloc(alcSize), *out = buf;
+		uint8_t* bufOC = (oc < 16 && !oc_interleave) ? (uint8_t*)malloc(alcSize) : 0;
+		uint8_t* outOC = (oc < 16 && !oc_interleave) ? bufOC : (buf + frameBytes + pad);
 
 		for( int row = 0; row < countY; ++row ) {
 			for( int col = 0; col < countX; ++col ) {
@@ -802,6 +819,10 @@ int main( int argc, char* argv[] )
 					*out++ = 0;
 					if (outOC) { *outOC++ = 0; }
 				}
+				if (oc < 16 && oc_interleave) {
+					out += frameBytes + pad;
+					outOC += frameBytes + pad;
+				}
 			}
 		}
 		FILE* f = fopen( args[ 2 ], "wb" );
@@ -811,7 +832,7 @@ int main( int argc, char* argv[] )
 		} else { printf( "failed to open file \"%s\" for writing\n", args[2] ); return 1; }
 		free( buf );
 
-		if (bufOC) {
+		if (bufOC && !oc_interleave) {
 			char name[_MAX_PATH];
 			const char* of = args[2];
 			size_t p = strlen(of);
