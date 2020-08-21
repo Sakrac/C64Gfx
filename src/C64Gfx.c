@@ -418,6 +418,7 @@ int main( int argc, char* argv[] )
 			" * -bobfont: custom demo format font\n"
 			" * -agnus: custom demo effect\n"
 			" * -textmc: multicolor text picture (enter without params for info)\n"
+			" * -bitmapmc: multicolor bitmap (enter without params for info)\n"
 			" * -multisprite: export a large sprite cut up into hardware sprites (enter without params for info)\n"
 			" * -screens: i don't remember\n"
 			" * -bundle: combine font data for multiple screens into a single font\n"
@@ -781,7 +782,8 @@ int main( int argc, char* argv[] )
 
 		uint8_t* buf = (uint8_t*)malloc(alcSize), *out = buf;
 		uint8_t* bufOC = (oc < 16 && !oc_interleave) ? (uint8_t*)malloc(alcSize) : 0;
-		uint8_t* outOC = (oc < 16 && !oc_interleave) ? bufOC : (buf + frameBytes + pad);
+		uint8_t* outOC = 0;
+		if (oc != 0xff) { outOC = (oc < 16 && !oc_interleave) ? bufOC : (buf + frameBytes + pad); }
 
 		for( int row = 0; row < countY; ++row ) {
 			for( int col = 0; col < countX; ++col ) {
@@ -930,7 +932,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> -out=<out> [-wid=char width] [-hgt=char height] [-rawcol]\n"); return 0; }
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> -out=<out> [-wid=char width] [-hgt=char height] [-rawcol] [-count=num]\n"); return 0; }
 
 		int w, h;
 		uint8_t* img = LoadPicture(args[1], &w, &h);
@@ -938,69 +940,78 @@ int main( int argc, char* argv[] )
 
 		int wc = w / 8;
 		int hc = h / 8;
+		int repeat = 1;
 
-		const char* wid = GetSwitch("wid", swtc, swtn);
-		if (wid) { wc = atoi(wid); }
-		const char* hgt = GetSwitch("hgt", swtc, swtn);
-		if (hgt) { hc = atoi(hgt); }
+		{
+			const char* wid = GetSwitch("wid", swtc, swtn);
+			if (wid) { wc = atoi(wid); }
+			const char* hgt = GetSwitch("hgt", swtc, swtn);
+			if (hgt) { hc = atoi(hgt); }
+			const char* rpt = GetSwitch("count", swtc, swtn);
+			if (rpt) { repeat = atoi(rpt); }
+		}
 
-		uint8_t* bitnap = (uint8_t*)malloc(wc * hc * 8), *bo = bitnap;
-		uint8_t* screen = (uint8_t*)malloc(wc * hc), *so = screen;
-		uint8_t* color = (uint8_t*)malloc(wc * hc), *co = color;
+		int perRow = (w / 8) / wc;
+
+		uint8_t* bitnap = (uint8_t*)malloc(wc * hc * 8 * repeat), *bo = bitnap;
+		uint8_t* screen = (uint8_t*)malloc(wc * hc * repeat), *so = screen;
+		uint8_t* color = (uint8_t*)malloc(wc * hc * repeat), *co = color;
 		// 00: bg, 01: >scr, 10: <scr, 11: col
 		uint8_t prevCol[3] = { 0, 0, 0 }; // previous set of colors
 
 		// prioritize background color 0, then 1 etc.
-		for (int y = 0; y < hc; ++y) {
-			for (int x = 0; x < wc; ++x) {
-				uint8_t* s = img + y * 8 * w + x * 8;
-				// get a histogram for the tile
-				uint8_t used[16];
-				uint8_t hist[16];
-				uint8_t num = 0;
-				for (int yp = 0; yp < 8; ++yp) {
-					for (int xp = 0; xp < 8; xp += 2) {
-						uint8_t c = s[xp + yp * w];
-						if (c != bg) {
-							uint8_t idx = num;
-							for (uint8_t i = 0; i < num; ++i) {
-								if (used[i] == c) { idx = i; break; }
+		for (int rp = 0; rp < repeat; ++rp) {
+			for (int yi = 0; yi < hc; ++yi) {
+				int y = yi + (rp / perRow) * hc;
+				for (int xi = 0; xi < wc; ++xi) {
+					int x = xi + (rp % perRow) * wc;
+					uint8_t* s = img + y * 8 * w + x * 8;
+					// get a histogram for the tile
+					uint8_t used[16];
+					uint8_t hist[16];
+					uint8_t num = 0;
+					for (int yp = 0; yp < 8; ++yp) {
+						for (int xp = 0; xp < 8; xp += 2) {
+							uint8_t c = s[xp + yp * w];
+							if (c != bg) {
+								uint8_t idx = num;
+								for (uint8_t i = 0; i < num; ++i) {
+									if (used[i] == c) { idx = i; break; }
+								}
+								if (idx == num) {
+									used[idx] = c;
+									hist[idx] = 1;
+									++num;
+								} else { hist[idx]++; }
 							}
-							if (idx == num) {
-								used[idx] = c;
-								hist[idx] = 1;
-								++num;
-							} else { hist[idx]++; }
 						}
 					}
-				}
-				uint8_t col[3] = { prevCol[0], prevCol[1], prevCol[2] };
-				for (uint8_t c = 0; c < num; ++c) {
-					uint8_t ti = 0, tv = 0;
-					for (uint8_t i = 0; i < num; ++i) {
-						if (hist[i] > tv) {
-							ti = i;
-							tv = hist[i];
+					uint8_t col[3] = { prevCol[0], prevCol[1], prevCol[2] };
+					for (uint8_t c = 0; c < num; ++c) {
+						uint8_t ti = 0, tv = 0;
+						for (uint8_t i = 0; i < num; ++i) {
+							if (hist[i] > tv) {
+								ti = i;
+								tv = hist[i];
+							}
 						}
+						hist[ti] = 0;
+						if (tv) { col[c] = used[ti]; }
 					}
-					hist[ti] = 0;
-					if (tv) { col[c] = used[ti]; }
-				}
-				for (int yp = 0; yp < 8; ++yp) {
-					uint8_t b = 0;
-					for (int xp = 0; xp < 8; xp += 2) {
-						uint8_t c = s[xp + yp * w];
-						b <<= 2;
-						if (c != bg) {
-							if (c == col[0]) { b |= 2; }
-							else if (c == col[1]) { b |= 1; }
-							else if (c == col[2]) { b |= 3; }
+					for (int yp = 0; yp < 8; ++yp) {
+						uint8_t b = 0;
+						for (int xp = 0; xp < 8; xp += 2) {
+							uint8_t c = s[xp + yp * w];
+							b <<= 2;
+							if (c != bg) {
+								if (c == col[0]) { b |= 2; } else if (c == col[1]) { b |= 1; } else if (c == col[2]) { b |= 3; }
+							}
 						}
+						*bo++ = b;
 					}
-					*bo++ = b;
+					*so++ = col[0] | (col[1] << 4);
+					*co++ = col[2];
 				}
-				*so++ = col[0] | (col[1] << 4);
-				*co++ = col[2];
 			}
 		}
 
@@ -1015,7 +1026,7 @@ int main( int argc, char* argv[] )
 			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
 			FILE* f = fopen(file, "wb");
 			if (f) {
-				fwrite(bitnap, wc * hc * 8, 1, f);
+				fwrite(bitnap, wc * hc * 8 * repeat, 1, f);
 				fclose(f);
 			}
 
@@ -1023,7 +1034,7 @@ int main( int argc, char* argv[] )
 			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
 			f = fopen(file, "wb");
 			if (f) {
-				fwrite(screen, wc * hc, 1, f);
+				fwrite(screen, wc * hc * repeat, 1, f);
 				fclose(f);
 			}
 
@@ -1037,9 +1048,9 @@ int main( int argc, char* argv[] )
 					for (int b = 0; b < (wc * hc); b += 2) {
 						*colDst++ = (colSrc[b] & 0xf) | (colSrc[b + 1] << 4);
 					}
-					fwrite(color, wc * hc / 2, 1, f);
+					fwrite(color, (wc * hc / 2) * repeat, 1, f);
 				} else {
-					fwrite(color, wc * hc, 1, f);
+					fwrite(color, wc * hc * repeat, 1, f);
 				}
 				fclose(f);
 			}
