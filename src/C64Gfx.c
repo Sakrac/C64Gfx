@@ -1032,8 +1032,7 @@ int main( int argc, char* argv[] )
 				fwrite(&bg, 1, 1, f);
 				fclose(f);
 			}
-		}
-		if (out) {
+		} else if (out) {
 			size_t outLen = strlen(out);
 			char file[_MAX_PATH];
 			const char* extChr = ".chr";
