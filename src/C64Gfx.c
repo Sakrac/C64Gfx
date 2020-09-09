@@ -6,6 +6,13 @@
 #include <stdlib.h>     /* qsort */
 #include <windows.h>
 
+#define MAX_ARGS 32
+#define INV_255 ( 1.0f / 255.0f )
+
+#define NUM_SPIRAL_POINTS 512
+#define M_PIF       3.14159265358979323846f
+
+
 // can be overwritten by -palette=<image>
 static uint8_t palette[ 16 ][ 3 ] = {
 	{ 0, 0, 0 },		// #000000
@@ -26,6 +33,17 @@ static uint8_t palette[ 16 ][ 3 ] = {
 	{ 171, 171, 171 }	// #ABABAB
 };
 
+static const uint8_t Dither8x8[8][9] = {
+	{ 0, 48, 12, 60, 3, 51, 15, 63 },
+	{ 32, 16, 44, 28, 35, 19, 47, 31 },
+	{ 8, 56, 4, 52, 11, 59, 7, 55 },
+	{ 40, 24, 36, 20, 43, 27, 39, 23 },
+	{ 2, 50, 14, 62, 1, 49, 13, 61 },
+	{ 34, 18, 46, 30, 33, 17, 45, 29 },
+	{ 10, 58, 6, 54, 9, 57, 5, 53 },
+	{ 42, 26, 38, 22, 41, 25, 37, 21 }
+};
+
 int ColDiff( int colA, int colB )
 {
 	if( colA == colB ) { return 0; }
@@ -41,7 +59,7 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 	int w, h, n;
 	uint8_t *raw = stbi_load( file, &w, &h, &n, 0 ), *src = raw;
 	if (!raw) { return 0; }
-	uint8_t *img = (uint8_t*)malloc( w * h ), *dst = img;
+	uint8_t *img = (uint8_t*)malloc( (size_t)w * (size_t)h ), *dst = img;
 	if (img) {
 		for (int p = 0, np = w * h; p < np; ++p) {
 			int r = src[0], g = src[1], b = src[2];
@@ -66,6 +84,76 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 	free( raw );
 	return img;
 }
+
+float ColorAlongPair(int r, int g, int b, int c0, int c1)
+{
+	if (c0 == c1) { return 0.0f; } // avoid division by 0
+	int r0 = palette[c0][0];
+	int g0 = palette[c0][1];
+	int b0 = palette[c0][2];
+	int r1 = palette[c1][0];
+	int g1 = palette[c1][1];
+	int b1 = palette[c1][2];
+	return (float)((r - r0) * (r1 - r0) + (g - g0) * (g1 - g0) + (b - b0) * (b1 - b0)) / (float)((r1 - r0) * (r1 - r0) + (g1 - g0) * (g1 - g0) + (b1 - b0) * (b1 - b0));
+}
+
+uint8_t* LoadPictureDither(const char* file, int* wr, int* hr, int ditherStep, int ditherLevel)
+{
+	int w, h, n;
+	uint8_t* raw = stbi_load(file, &w, &h, &n, 0), * src = raw;
+	if (!raw) { return 0; }
+	uint8_t* img = (uint8_t*)malloc((size_t)w * (size_t)h), * dst = img;
+	if (img) {
+		for (int y = 0; y < h; ++y) {
+			for (int x = 0; x < w; ++x) {
+				int r = src[0], g = src[1], b = src[2];
+				int bst = (1 << 30) - 1;
+				int bc[2] = { 0,-1 };
+				for (int c = 0; c < 16; ++c) {
+					int or = r - palette[c][0];
+					int og = g - palette[c][1];
+					int ob = b - palette[c][2];
+					int o = or *or +og * og + ob * ob;
+					if (o < bst) {
+						bst = o;
+						bc[0] = c;
+					}
+				}
+
+				// find secondary color
+				bst = (1 << 30) - 1;
+				for (int c = 0; c < 16; ++c) {
+					if (c != bc[0]) {
+						float a = ColorAlongPair(r, g, b, bc[0], c);
+						if (a >= 0.0f && a <= 1.0f) {
+							int or = r - palette[c][0];
+							int og = g - palette[c][1];
+							int ob = b - palette[c][2];
+							int o = or *or +og * og + ob * ob;
+							if (o < bst) {
+								bst = o;
+								bc[1] = c;
+							}
+						}
+					}
+				}
+				if (bc[1] >= 0) {
+					float a = ditherLevel * ColorAlongPair(r, g, b, bc[0], bc[1]);
+					int s = (int)(a) > Dither8x8[y & 7][(x / ditherStep) & 7];
+					*dst++ = (uint8_t)bc[s];
+				} else {
+					*dst++ = (uint8_t)bc[0];
+				}
+				src += n;
+			}
+		}
+	}
+	if (wr) { *wr = w; }
+	if (hr) { *hr = h; }
+	free(raw);
+	return img;
+}
+
 
 // R' = R/255
 // G' = G/255
@@ -139,15 +227,6 @@ float HSLDist( struct float3 hsl1, struct float3 hsl2 )
 	return sqrtf( hd*hd / 9.0f + sd*sd + ld*ld );
 }
 
-uint8_t Dither8x8[8][9] = {
-	{ 0, 48, 12, 60, 3, 51, 15, 63 },
-	{ 32, 16, 44, 28, 35, 19, 47, 31 },
-	{ 8, 56, 4, 52, 11, 59, 7, 55 },
-	{ 40, 24, 36, 20, 43, 27, 39, 23 },
-	{ 2, 50, 14, 62, 1, 49, 13, 61 },
-	{ 34, 18, 46, 30, 33, 17, 45, 29 },
-	{ 10, 58, 6, 54, 9, 57, 5, 53 },
-	{ 42, 26, 38, 22, 41, 25, 37, 21 } };
 
 
 char* GetSwitch( const char* match, char** swtc, int swtn )
@@ -167,12 +246,6 @@ char* GetSwitch( const char* match, char** swtc, int swtn )
 }
 
 float square( float x ) { return x * x; }
-
-#define MAX_ARGS 32
-#define INV_255 ( 1.0f / 255.0f )
-
-#define NUM_SPIRAL_POINTS 512
-#define M_PIF       3.14159265358979323846f
 
 struct DistIdx {
 	float dist;
@@ -200,7 +273,7 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 			uint8_t c = img[x+y*w];
 			if (c==col||c==mc1||c==mc2) {
 				// find left/right of this color in image
-				uint8_t* row = img + y * w;
+				uint8_t* row = img + (size_t)y * w;
 				int l = x, ls=x;
 				int r = x, rs=x;
 				int sh = (y<(h-sprh)) ? sprh : (h-y);
@@ -227,7 +300,7 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 					if ((rs-ls)>24) { rs = ls+24; }
 					if (col>=16) { // check if there is a sprite color
 						for (int ys = 0; ys<sh&&col>=16; ++ys) {
-							uint8_t* spr = img+ls+(y+ys) * w;
+							uint8_t* spr = img+ls+((size_t)y+ys) * w;
 							for (int xs = 0; xs<(rs-ls); ++xs) {
 								uint8_t c2 = *spr++;
 								if (c2!=bg && c2!=mc1 && c2!=mc2) {
@@ -245,7 +318,7 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 						for (int ys = 0; ys<sh; ++ys) {
 							uint8_t b = 0;
 							for (int xs = 0; xs<sw; xs += 2) {
-								uint8_t* spr = img+ls+xs+(y+ys) * w;
+								uint8_t* spr = img+ls+xs+((size_t)y+ys) * w;
 								uint8_t c2 = *spr;
 								if (c2==bg) { c2 = spr[1]; }
 								b <<= 2;
@@ -269,7 +342,7 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 					for (int ys = 0; ys<sh; ++ys) {
 						uint8_t b = 0;
 						for (int xs = 0; xs<sw; ++xs) {
-							uint8_t* spr = img+ls+xs+(y+ys) * w;
+							uint8_t* spr = img+ls+xs+((size_t)y+ys) * w;
 							uint8_t c2 = spr[0];
 							b <<= 1;
 							if (c2==col) { b |= 1;
@@ -932,10 +1005,20 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>/-koala=<koala>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num]\n"); return 0; }
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>/-koala=<koala>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>]\n"); return 0; }
 
 		int w, h;
-		uint8_t* img = LoadPicture(args[1], &w, &h);
+		uint8_t* img = 0;
+
+		const char* ditherStr = GetSwitch("dither", swtc, swtn);
+		if (ditherStr && ditherStr[0]) {
+			int amount = atoi(ditherStr);
+			if (amount >= 1 && amount <= 64) {
+				img = LoadPictureDither(args[1], &w, &h, 2, amount);
+			}
+		}
+		if (!img) { img = LoadPicture(args[1], &w, &h); }
+		
 		uint8_t bg = (uint8_t)atoi(args[2]);
 
 		int wc = w / 8;
