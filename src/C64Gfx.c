@@ -932,7 +932,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> -out=<out> [-wid=char width] [-hgt=char height] [-rawcol] [-count=num]\n"); return 0; }
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>/-koala=<koala>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num]\n"); return 0; }
 
 		int w, h;
 		uint8_t* img = LoadPicture(args[1], &w, &h);
@@ -987,7 +987,7 @@ int main( int argc, char* argv[] )
 						}
 					}
 					uint8_t col[3] = { prevCol[0], prevCol[1], prevCol[2] };
-					for (uint8_t c = 0; c < num; ++c) {
+					for (uint8_t c = 0; c < 3; ++c) {
 						uint8_t ti = 0, tv = 0;
 						for (uint8_t i = 0; i < num; ++i) {
 							if (hist[i] > tv) {
@@ -1015,7 +1015,24 @@ int main( int argc, char* argv[] )
 			}
 		}
 
+		uint8_t save_as_koala_painter = 0;
 		const char* out = GetSwitch("out", swtc, swtn);
+		if (out == 0) {
+			out = GetSwitch("koala", swtc, swtn);
+			if (out) { save_as_koala_painter++; }
+		}
+		if (save_as_koala_painter) {
+			FILE* f = fopen(out, "wb");
+			if (f) {
+				const char aAddr[] = { 0x00, 0x60 };
+				fwrite(aAddr, 2, 1, f);
+				fwrite(bitnap, wc * hc * 8 * repeat, 1, f);
+				fwrite(screen, wc* hc* repeat, 1, f);
+				fwrite(color, wc* hc* repeat, 1, f);
+				fwrite(&bg, 1, 1, f);
+				fclose(f);
+			}
+		}
 		if (out) {
 			size_t outLen = strlen(out);
 			char file[_MAX_PATH];
