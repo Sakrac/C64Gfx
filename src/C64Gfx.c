@@ -54,6 +54,21 @@ int ColDiff( int colA, int colB )
 	return r*r+g*g+b*b;
 }
 
+int ClosestColor(int c, uint8_t* options, int num)
+{
+	int dist = ColDiff(c, options[0]);
+	int best = options[0];
+	for (int i = 1; i < num; ++i) {
+		int d = ColDiff(c, options[i]);
+		if (d < dist) {
+			dist = d;
+			best = options[i];
+		}
+	}
+	return best;
+}
+
+
 uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 {
 	int w, h, n;
@@ -1033,8 +1048,13 @@ int main( int argc, char* argv[] )
 			const char* rpt = GetSwitch("count", swtc, swtn);
 			if (rpt) { repeat = atoi(rpt); }
 		}
+		if (GetSwitch("koala", swtc, swtn) != 0) {
+			wc = 40;
+			hc = 25;
+		}
 
-		int perRow = (w / 8) / wc;
+
+		int perRow = (w>(wc*8)) ? (w / 8) / wc : 1;
 
 		uint8_t* bitnap = (uint8_t*)malloc(wc * hc * 8 * repeat), *bo = bitnap;
 		uint8_t* screen = (uint8_t*)malloc(wc * hc * repeat), *so = screen;
@@ -1055,7 +1075,7 @@ int main( int argc, char* argv[] )
 					uint8_t num = 0;
 					for (int yp = 0; yp < 8; ++yp) {
 						for (int xp = 0; xp < 8; xp += 2) {
-							uint8_t c = s[xp + yp * w];
+ 							uint8_t c = ((x*8+xp)<w && (y*8+yp)<h) ? s[xp + yp * w] : bg;
 							if (c != bg) {
 								uint8_t idx = num;
 								for (uint8_t i = 0; i < num; ++i) {
@@ -1069,7 +1089,7 @@ int main( int argc, char* argv[] )
 							}
 						}
 					}
-					uint8_t col[3] = { prevCol[0], prevCol[1], prevCol[2] };
+					uint8_t col[4] = { bg, prevCol[0], prevCol[1], prevCol[2] };
 					for (uint8_t c = 0; c < 3; ++c) {
 						uint8_t ti = 0, tv = 0;
 						for (uint8_t i = 0; i < num; ++i) {
@@ -1079,21 +1099,26 @@ int main( int argc, char* argv[] )
 							}
 						}
 						hist[ti] = 0;
-						if (tv) { col[c] = used[ti]; }
+						if (tv) { col[c+1] = used[ti]; }
 					}
 					for (int yp = 0; yp < 8; ++yp) {
 						uint8_t b = 0;
 						for (int xp = 0; xp < 8; xp += 2) {
-							uint8_t c = s[xp + yp * w];
+							uint8_t c = ((x * 8 + xp) < w && (y * 8 + yp) < h) ? s[xp + yp * w] : bg;
+//							uint8_t c = s[xp + yp * w];
 							b <<= 2;
 							if (c != bg) {
-								if (c == col[0]) { b |= 2; } else if (c == col[1]) { b |= 1; } else if (c == col[2]) { b |= 3; }
+								if (c != col[1] && c != col[2] && c != col[3]) { c = ClosestColor(c, col, 4); }
+								if (c == col[1]) { b |= 2; } else if (c == col[2]) { b |= 1; } else if (c == col[3]) { b |= 3; }
 							}
 						}
 						*bo++ = b;
 					}
-					*so++ = col[0] | (col[1] << 4);
-					*co++ = col[2];
+					*so++ = col[1] | (col[2] << 4);
+					*co++ = col[3];
+					prevCol[0] = col[1];
+					prevCol[1] = col[2];
+					prevCol[2] = col[3];
 				}
 			}
 		}
