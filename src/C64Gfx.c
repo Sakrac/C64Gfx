@@ -376,7 +376,7 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 #define MAX_MULTISPRITE 32
 int MultiSprite(const char** args, int argn, char** swtc, int swtn)
 {
-	if (argn<6) { printf("Usage:\nC64Gfx -multisprite <png> <out> <bg> <mc1> <mc0> -overlay=color\n"); return 0; }
+	if (argn<6) { printf("Usage:\nC64Gfx -multisprite <png> <out> <bg> <mc1> <mc0> -overlay=color -singlecount\n"); return 0; }
 
 	int w, h;
 	uint8_t* img = LoadPicture(args[1], &w, &h);
@@ -387,6 +387,8 @@ int MultiSprite(const char** args, int argn, char** swtc, int swtn)
 	uint8_t spriteData[MAX_MULTISPRITE][64] = { 0 };
 	int spriteOffs[MAX_MULTISPRITE][3] = { 0 }; // 3rd is color
 	int nSprites = 0;
+
+	int singlecount = GetSwitch("singlecount", swtc, swtn) != 0;
 
 	uint8_t cols[3] = { (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]), (uint8_t)atoi(args[5]) };
 	// check for overlay sprites if specified
@@ -431,11 +433,17 @@ int MultiSprite(const char** args, int argn, char** swtc, int swtn)
 	strcpy(outfile+outnameLen, ".s");
 	f = fopen(outfile, "w");
 	if (f) {
-		fprintf(f, "\tdc.b %d\t;single color sprite count\n", nOutline );
+		if (singlecount) {
+			fprintf(f, "\tdc.b %d\t;sprite count\n", nSprites);
+		} else {
+			fprintf(f, "\tdc.b %d\t;single color sprite count\n", nOutline);
+		}
 		for (int o = 0; o<nOutline; ++o) {
 			fprintf(f, "\tdc.b %d, %d, %d\t; offs x, y and sprite color\n", spriteOffs[o][0], spriteOffs[o][1], spriteOffs[o][2]);
 		}
-		fprintf(f, "\tdc.b %d\t;multicolor sprite count\n", nSprites-nOutline);
+		if (!singlecount) {
+			fprintf(f, "\tdc.b %d\t;multicolor sprite count\n", nSprites - nOutline);
+		}
 		for (int o = nOutline; o<nSprites; ++o) {
 			fprintf(f, "\tdc.b %d, %d, %d\t; offs x, y and sprite color\n", spriteOffs[o][0], spriteOffs[o][1], spriteOffs[o][2]);
 		}
