@@ -4,7 +4,11 @@
 #include <stdint.h>
 #include <math.h>
 #include <stdlib.h>     /* qsort */
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #define MAX_ARGS 32
 #define INV_255 ( 1.0f / 255.0f )
@@ -14,8 +18,11 @@
 
 #if defined(_MSC_VER)
 #define FOpen(f, n, t) (fopen_s(&f, n, t) == 0)
+#define StrNCmp(s1, s2, cnt) _strnicmp(s1, s2, cnt)
 #else
 #define FOpen(f, n, t) (f = fopen(n, t))
+#define StrNCmp(s1, s2, cnt) strncmp(s1, s2, cnt)
+#define _MAX_PATH 2048
 #endif
 
 // can be overwritten by -palette=<image>
@@ -254,7 +261,7 @@ char* GetSwitch( const char* match, char** swtc, int swtn )
 	int l = ( int )strlen( match );
 	while( swtn )
 	{
-		if( _strnicmp( match, *swtc, l ) == 0 )
+		if( StrNCmp( match, *swtc, l ) == 0 )
 		{
 			if( ( *swtc )[ l ] == '=' ) return *swtc + l + 1;
 			else if( !(*swtc)[l] ) return *swtc;
@@ -504,8 +511,16 @@ int main( int argc, char* argv[] )
 	char currDir[512];
 
 	if (GetSwitch("dir",swtc,swtn)) {
-		GetCurrentDirectory(sizeof(currDir), currDir);
-		printf("%s\n", currDir);
+		#ifdef _WIN32
+			GetCurrentDirectory(sizeof(currDir), currDir);
+			printf("%s\n", currDir);
+		#else
+			char* dir = getcwd(NULL, 0);
+			if( dir) {
+				printf("%s\n", dir);
+				free(dir);
+			}
+		#endif
 	}
 
 	if (swtn < 1) {
