@@ -45,7 +45,7 @@ static uint8_t palette[ 16 ][ 3 ] = {
 	{ 171, 171, 171 }	// #ABABAB
 };
 
-static const uint8_t Dither8x8[8][9] = {
+static const uint8_t Dither8x8[8][8] = {
 	{ 0, 48, 12, 60, 3, 51, 15, 63 },
 	{ 32, 16, 44, 28, 35, 19, 47, 31 },
 	{ 8, 56, 4, 52, 11, 59, 7, 55 },
@@ -918,9 +918,9 @@ int main( int argc, char* argv[] )
 							for (int x = 0; x<8; x+=2) {
 								b <<= 2;
 								uint8_t c = cell[x]; if (c == oc) { c = cell[x + 1]; }
-								if (cell[x]==mc[0]) { b |= 1; }
-								else if (cell[x]==mc[1]) { b |= 2; }
-								else if (cell[x]==mc[2]) { b |= 3; }
+								if (c==mc[0]) { b |= 1; }
+								else if (c==mc[1]) { b |= 2; }
+								else if (c==mc[2]) { b |= 3; }
 							}
 						} else {
 							for (int x = 0; x<8; ++x) {
