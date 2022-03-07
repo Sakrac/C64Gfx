@@ -540,6 +540,7 @@ int main( int argc, char* argv[] )
 			" * -screens: i don't remember\n"
 			" * -bundle: combine font data for multiple screens into a single font\n"
 			" * -texthires: hires text picture (enter without params for info)\n"
+			" * -rows: convert to 8 pixels per byte row by row\n"
 			" * <no arg>: convert extended color background image (enter without params for info)\n");
 		return 0;
 	}
@@ -825,6 +826,36 @@ int main( int argc, char* argv[] )
 		}
 
 
+		return 0;
+	}
+
+	if (GetSwitch("rows", swtc, swtn))
+	{
+		if (argn <=3) {
+			printf("Usage:\nGfx -rows <image> <out> <col>\n"); return 0;
+		}
+		int w, h;
+		uint8_t* img = LoadPicture(args[1], &w, &h);
+		int wc = w / 8;
+		int col = atoi(args[3]);
+		uint8_t* dest = (uint8_t*)calloc(1,wc * h), *o = dest;
+		for (int y = 0; y < h; ++y) {
+			for (int x = 0; x < wc; ++x) {
+				uint8_t b = 0;
+				for (int m = 0; m < 8; ++m) {
+					b <<= 1;
+					if (img[y * w + x] == col) { b |= 1; }
+				}
+				*o++ = b;
+			}
+		}
+		FILE* f = 0;
+		if (fopen_s(&f, args[2], "wb") == 0) {
+			fwrite(dest, wc * h, 1, f);
+			fclose(f);
+		}
+		free(dest);
+		free(img);
 		return 0;
 	}
 
