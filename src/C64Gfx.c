@@ -1,6 +1,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image.h"
+#include "stb/stb_image_write.h"
 #include <stdint.h>
 #include <math.h>
 #include <stdlib.h>     /* qsort */
@@ -1081,7 +1083,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>/-koala=<koala>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>]\n"); return 0; }
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>/-koala=<koala>/-png=<png>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 
 		int w, h;
 		uint8_t* img = 0;
@@ -1114,6 +1116,49 @@ int main( int argc, char* argv[] )
 			hc = 25;
 		}
 
+		const char *subst = GetSwitch("subst", swtc, swtn);
+		if (subst) {
+			char subst_image[_MAX_PATH], *so = subst_image;
+			const char *ps = subst;
+			while (*ps && *ps != ',') { *so++ = *ps++; }
+			*so++ = 0;
+			int sw, sh;
+			uint8_t *swp = LoadPicture(subst_image, &sw, &sh);
+			if (swp) {
+				uint8_t subst_cols[16];
+				int nCols = 0;
+				while (*ps == ',' && nCols<16) {
+					++ps;
+					int col = atoi(ps);
+					subst_cols[nCols++] = (uint8_t)col;
+					while (*ps && *ps != ',') { ++ps; }
+				}
+				if (nCols) {
+					uint8_t *ri = img;
+					uint8_t *rs = swp;
+					size_t skip_i = w > sw ? (w - sw) : 0;
+					size_t skip_s = sw > w ? (sw - w) : 0;
+					int nx = w > sw ? sw : w;
+					int ny = h > sh ? sh : h;
+					for (int y = 0; y < ny; ++y) {
+						for (int x = 0; x < nx; ++x) {
+							uint8_t i = *ri;
+							for (int c = 0; c < nCols; ++c) {
+								if (i == subst_cols[c]) {
+									*ri = *rs;
+									break;
+								}
+							}
+							++ri; ++rs;
+						}
+						ri += skip_i; rs += skip_s;
+					}
+				}
+				free(swp);
+			}
+
+
+		}
 
 		int perRow = (w>(wc*8)) ? (w / 8) / wc : 1;
 
@@ -1185,12 +1230,43 @@ int main( int argc, char* argv[] )
 		}
 
 		uint8_t save_as_koala_painter = 0;
+		uint8_t save_as_png = 0;
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out == 0) {
 			out = GetSwitch("koala", swtc, swtn);
 			if (out) { save_as_koala_painter++; }
+			else {
+				out = GetSwitch("png", swtc, swtn);
+				if(out) { save_as_png++; }
+			}
 		}
-		if (save_as_koala_painter) {
+
+		if (save_as_png) {
+			uint8_t *raw = (uint8_t *)calloc(1, wc * 8 * hc * 8 * 3);
+			for (int yc = 0; yc < hc; ++yc) {
+				for (int xc = 0; xc < wc; ++xc) {
+					uint8_t col[4] = {bg, screen[yc * wc + xc] >> 4, screen[yc * wc + xc] & 0xf, color[yc * wc + xc] & 0xf};
+					uint8_t *ro = raw + (yc * wc * 8 + xc) * 8 * 3;
+					for (int y = 0; y < 8; ++y) {
+						uint8_t b = bitnap[(yc * wc + xc) * 8 + y];
+						for (int x = 0; x < 4; ++x) {
+							uint8_t c = b >> 6;
+							uint8_t *p = palette[col[c]];
+							*ro++ = p[0];
+							*ro++ = p[1];
+							*ro++ = p[2];
+							*ro++ = p[0];
+							*ro++ = p[1];
+							*ro++ = p[2];
+							b <<= 2;
+						}
+						ro += (wc-1) * 8 * 3;
+					}
+				}
+			}
+			stbi_write_png(out, wc*8, hc*8, 3, raw, wc * 8 * 3);
+			free(raw);
+		} else if (save_as_koala_painter) {
 			FILE* f;
 			FOpen(f, out, "wb");
 			if (f) {
