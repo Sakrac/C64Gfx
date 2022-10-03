@@ -296,11 +296,13 @@ const int sprh = 21;
 int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1, uint8_t mc2, uint8_t* out, int* offs )
 {
 	uint8_t* pix = img;
+	uint8_t sc = 0xff;
 
 	for (int y = 0; y<h; ++y) {
 		for (int x = 0; x<w; ++x) {
 			uint8_t c = img[x+y*w];
-			if (c==col||c==mc1||c==mc2) {
+			if (col==0xff && sc == 0xff && c != bg && c != mc1 && c != mc2) { sc = c; }
+			if (c==col||c==mc1||c==mc2||c==sc) {
 				// find left/right of this color in image
 				uint8_t* row = img + (size_t)y * w;
 				int l = x, ls=x;
@@ -309,7 +311,7 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 				for (int ys = 0; ys<sh; ++ys) {
 					for (int xs = 0; xs<w; ++xs) {
 						uint8_t c2 = *row++;
-						if (c2==col||c2==mc1||c2==mc2) {
+						if (c2==col||c2==mc1||c2==mc2||c2==sc) {
 							l = l<xs ? l : xs;
 							r = r>xs ? r : xs;
 							if (xs<ls&&(rs-xs)<=sprw) {
@@ -328,16 +330,17 @@ int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1,
 					rs = (rs+1)&0xfe; // this might make it 26 wide..
 					if ((rs-ls)>24) { rs = ls+24; }
 					if (col>=16) { // check if there is a sprite color
-						for (int ys = 0; ys<sh&&col>=16; ++ys) {
-							uint8_t* spr = img+ls+((size_t)y+ys) * w;
-							for (int xs = 0; xs<(rs-ls); ++xs) {
-								uint8_t c2 = *spr++;
-								if (c2!=bg && c2!=mc1 && c2!=mc2) {
-									col = c2;
-									break;
-								}
-							}
-						}
+						col = sc;
+//						for (int ys = 0; ys<sh&&col>=16; ++ys) {
+//							uint8_t* spr = img+ls+((size_t)y+ys) * w;
+//							for (int xs = 0; xs<(rs-ls); ++xs) {
+//								uint8_t c2 = *spr++;
+//								if (c2!=bg && c2!=mc1 && c2!=mc2) {
+//									col = c2;
+//									break;
+//								}
+//							}
+//						}
 					}
 					{
 						offs[0] = ls;
@@ -1678,6 +1681,8 @@ int main( int argc, char* argv[] )
 
 	if (GetSwitch("texthires", swtc, swtn)) {
 		int w, h;
+		if (argn <= 1) { printf("Usage:\nGfx -texthires [-bg=col] [-out=file] [-skip0] [-rawcol]\n * creates .chr, .scr, .col files\n"); return 0; }
+
 		uint8_t* img = LoadPicture(args[1], &w, &h);
 
 		int wc = w/8;
