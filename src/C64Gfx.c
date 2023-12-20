@@ -864,6 +864,7 @@ int main( int argc, char* argv[] )
 		return 0;
 	}
 
+
 	if( GetSwitch( "columns", swtc, swtn ) )
 	{
 		if( argn < 5 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11] [-oc=col] [-oci=col]\n"
@@ -1083,6 +1084,26 @@ int main( int argc, char* argv[] )
 			printf( "failed to open file %s\n", args[ 1 ] );
 			return 1;
 		}
+	}
+
+	if (GetSwitch("bitmap", swtc, swtn)) {
+		if (argn < 3) { printf("Usage:\nGfx -bitmap <image> [-out=<out>/-png=<png>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
+		int w, h;
+		uint8_t* img = 0;
+
+		const char* ditherStr = GetSwitch("dither", swtc, swtn);
+		if (ditherStr && ditherStr[0]) {
+			int amount = atoi(ditherStr);
+			if (amount >= 1 && amount <= 64) {
+				img = LoadPictureDither(args[1], &w, &h, 2, amount);
+			}
+		}
+		if (!img) { img = LoadPicture(args[1], &w, &h); }
+
+		uint8_t* screen = (uint8_t*)calloc(1, w * h);
+		uint8_t* bitmap = (uint8_t*)calloc(1, w * h * 8);
+
+		// TODO: implement the rest
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
