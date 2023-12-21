@@ -540,6 +540,7 @@ int main( int argc, char* argv[] )
 			" * -bobfont: custom demo format font\n"
 			" * -agnus: custom demo effect\n"
 			" * -textmc: multicolor text picture (enter without params for info)\n"
+			" * -bitmap: hires bitmap (enter without params for info)\n"
 			" * -bitmapmc: multicolor bitmap (enter without params for info)\n"
 			" * -multisprite: export a large sprite cut up into hardware sprites (enter without params for info)\n"
 			" * -screens: i don't remember\n"
@@ -1087,7 +1088,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmap", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmap <image> [-out=<out>/-png=<png>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
+		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>/-png=<png>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 		int w, h;
 		uint8_t* img = 0;
 
@@ -1100,10 +1101,72 @@ int main( int argc, char* argv[] )
 		}
 		if (!img) { img = LoadPicture(args[1], &w, &h); }
 
-		uint8_t* screen = (uint8_t*)calloc(1, w * h);
-		uint8_t* bitmap = (uint8_t*)calloc(1, w * h * 8);
+		int wid = (w+7)/8, hgt = (h+7)/8;
 
-		// TODO: implement the rest
+		uint8_t* screen = (uint8_t*)calloc(1, wid * hgt);
+		uint8_t* bitmap = (uint8_t*)calloc(1, wid * hgt * 8);
+
+		for (int y = 0; y < hgt; ++y) {
+			for (int x = 0; x<wid; ++x) {
+				uint8_t hist[16]; memset(hist, 0, sizeof(hist));
+				for(int cy=0; cy<8; ++cy) {
+					for(int cx=0; cx<8; ++cx) {
+						hist[img[(y * 8 + cy) * w + (x * 8 + cx)]&0xf]++;
+					}
+				}
+				uint8_t col[2] = { 0,0 }, cnt[2] = { 0, 0 };
+				for(int c=0; c<16; ++c) {
+					if(hist[c]>cnt[0]) {
+						col[0] = c; cnt[0] = hist[c];
+					} else if(hist[c]>cnt[1]) {
+						col[1] = c; cnt[1] = hist[c];
+					}
+				}
+				if(col[0]<col[1]) {
+					int t = col[0]; col[0] = col[1]; col[1] = t;
+				}
+				screen[y * wid + x] = col[0] | (col[1] << 4);
+				for(int cy=0; cy<8; ++cy) {
+					uint8_t b = 0;
+					for(int cx=0; cx<8; ++cx) {
+						b = (b << 1);
+						uint8_t c = img[(y * 8 + cy) * w + (x * 8 + cx)]&0xf;
+						if (c != col[0] && c != col[1]) {
+							c = ClosestColor(c, col, 2);
+						}
+						if (c == col[1]) { b |= 1; }
+					}
+					bitmap[(y * wid + x) * 8 + cy] = b;
+				}
+			}
+		}
+		const char* out = GetSwitch("out", swtc, swtn);
+		if (out) {
+			size_t outLen = strlen(out);
+			char file[_MAX_PATH];
+			const char* extChr = ".chr";
+			const char* extScr = ".scr";
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
+			FILE* f;
+			FOpen(f, file, "wb");
+			if (f) {
+				fwrite(bitmap, wid * hgt * 8, 1, f);
+				fclose(f);
+			}
+
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
+			FOpen(f, file, "wb");
+			if (f) {
+				fwrite(screen, wid * hgt, 1, f);
+				fclose(f);
+			}
+		}
+		free(screen);
+		free(bitmap);
+		free(img);
+		return 0;
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
