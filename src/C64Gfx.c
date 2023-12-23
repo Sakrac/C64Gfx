@@ -1167,6 +1167,39 @@ int main( int argc, char* argv[] )
 				fclose(f);
 			}
 		}
+		const char* png = GetSwitch("png", swtc, swtn);
+		if(png) {
+			uint8_t* png_image = (uint8_t*)calloc(1, wid * 8 * hgt * 8 * 3);
+			const uint8_t* ps = screen;
+			for (int y = 0; y < hgt; ++y) {
+				uint8_t* png_row = png_image + y * 8 * wid * 8 * 3;
+				const uint8_t* pc = bitmap + y * wid * 8;
+				for (int x = 0; x < wid; ++x) {
+					uint8_t* png_char = png_row + x * 8 * 3;
+					uint8_t c = *ps++;
+					for(int cr=0; cr<8; ++cr) {
+						uint8_t b = *pc++;
+						for (int cc = 0; cc < 8; ++cc) {
+							uint8_t i = (b & 0x80) ? (c >> 4) : (c & 0xf);
+							*png_char++ = palette[i][0];
+							*png_char++ = palette[i][1];
+							*png_char++ = palette[i][2];
+							b <<= 1;
+						}
+						png_char += (wid - 1) * 8 * 3;
+					}
+				}
+			}
+			size_t pngLen = strlen(png);
+			char file[_MAX_PATH];
+			const char* extPng = ".png";
+			memcpy(file, png, pngLen);
+			memcpy(file + pngLen, extPng, sizeof(extPng) + 1);
+			//STBIWDEF int stbi_write_png(char const *filename, int x, int y, int comp, const void *data, int stride_bytes)
+			stbi_write_png(png, wid*8, hgt*8, 3, png_image, wid * 8 * 3);
+			free(png_image);
+
+		}
 		free(screen);
 		free(bitmap);
 		free(img);
