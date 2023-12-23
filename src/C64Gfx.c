@@ -1107,16 +1107,18 @@ int main( int argc, char* argv[] )
 		uint8_t* bitmap = (uint8_t*)calloc(1, wid * hgt * 8);
 
 		for (int y = 0; y < hgt; ++y) {
+			const uint8_t* pc = img + y * 8 * w;
 			for (int x = 0; x<wid; ++x) {
 				uint8_t hist[16]; memset(hist, 0, sizeof(hist));
 				for(int cy=0; cy<8; ++cy) {
 					for(int cx=0; cx<8; ++cx) {
-						hist[img[(y * 8 + cy) * w + (x * 8 + cx)]&0xf]++;
+						hist[pc[cy * w + cx]&0xf]++;
 					}
 				}
 				uint8_t col[2] = { 0,0 }, cnt[2] = { 0, 0 };
 				for(int c=0; c<16; ++c) {
 					if(hist[c]>cnt[0]) {
+						col[1] = col[0]; cnt[1] = col[0];
 						col[0] = c; cnt[0] = hist[c];
 					} else if(hist[c]>cnt[1]) {
 						col[1] = c; cnt[1] = hist[c];
@@ -1130,7 +1132,7 @@ int main( int argc, char* argv[] )
 					uint8_t b = 0;
 					for(int cx=0; cx<8; ++cx) {
 						b = (b << 1);
-						uint8_t c = img[(y * 8 + cy) * w + (x * 8 + cx)]&0xf;
+						uint8_t c = pc[cy * w + cx]&0xf;
 						if (c != col[0] && c != col[1]) {
 							c = ClosestColor(c, col, 2);
 						}
@@ -1138,7 +1140,9 @@ int main( int argc, char* argv[] )
 					}
 					bitmap[(y * wid + x) * 8 + cy] = b;
 				}
+				pc += 8;
 			}
+			pc -= 8 * wid + w;
 		}
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out) {
