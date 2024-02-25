@@ -1451,7 +1451,7 @@ int main( int argc, char* argv[] )
 	}
 	
 	if (GetSwitch("ebcm", swtc, swtn)) {
-		if (argn < 5) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> -out=<out>\n"); return 0; }
+		if (argn < 5) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> -out=<out> -rawcol -skip0\n"); return 0; }
 		uint8_t cols[4] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]), (uint8_t)atoi(args[5]) };
 
 		int w, h;
@@ -1474,9 +1474,11 @@ int main( int argc, char* argv[] )
 		uint8_t* chars = (uint8_t*)malloc(64 * 8);
 		uint8_t* color = (uint8_t*)malloc(wc * hc);
 
-		int nunChars = 0;	// first char is empty!
+		int nunChars = 0;
 
 		int prevChrCol = 0;
+
+		uint8_t skip0 = !!GetSwitch("skip0", swtc, swtn);
 
 		// prioritize background color 0, then 1 etc.
 		for (int y = 0; y < hc; ++y) {
@@ -1503,10 +1505,9 @@ int main( int argc, char* argv[] )
 							}
 							bg = c;
 							bgi = cbi;
-						}
-						else {
+						} else {
 							fg = c;
-							fgi = c;
+							fgi = cbi;
 						}
 					}
 				}
@@ -1522,28 +1523,34 @@ int main( int argc, char* argv[] )
 					bit8[yp] = b;
 				}
 				int n = 0;
-				for (; n < nunChars; ++n) {
-					if (chrbits == *(uint64_t*)(chars + n * 8)) {
-						break;
-					}
-					else if ((~chrbits) == *(uint64_t*)(chars + n * 8)) {
-						if (fgi != 0xff) {
-							bgi = fgi;
-							fgi = bg;
-							bg = fg;
-							fg = fgi;
+				if (skip0 && fg == 0xff) {
+					n = 0x3f;
+					fg = bg;
+				} else {
+					for (; n < nunChars; ++n) {
+						if (chrbits == *(uint64_t*)(chars + n * 8)) {
 							break;
+						} else if ((~chrbits) == *(uint64_t*)(chars + n * 8)) {
+							if (fgi != 0xff) {
+								uint8_t t;
+								t = bgi;  bgi = fgi; fgi = t;
+								t = bg; bg = fg; fg = t;
+								break;
+							}
+						}
+					}
+					if (n >= 64) {
+						printf("Overflow at %d, %d (%d, %d)\n", x, y, x * 8, y * 8);
+					}
+					if (n >= nunChars) {
+						if (n == 64) { n = 0x3f; fg = 0; bgi = 0; }
+						else {
+							*(uint64_t*)(chars + n * 8) = chrbits;
+							nunChars = n+1;
 						}
 					}
 				}
-				if (n >= nunChars) {
-					if (n == 64) { n = 0; fg = 0; bgi = 0; }
-					else {
-						*(uint64_t*)(chars + n * 8) = chrbits;
-						nunChars = n+1;
-					}
-				}
-				color[x + y * wc] = fg == 0xff ? 0 : fg;
+				color[x + y * wc] = fg == 0xff ? bg : fg;
 				screen[x + y * wc] = (bgi << 6) | (uint8_t)n;
 			}
 		}
@@ -1562,12 +1569,7 @@ int main( int argc, char* argv[] )
 			FILE* f;
 			FOpen(f, file, "wb");
 			if (f) {
-				if (GetSwitch("skip0", swtc, swtn)) {
-					fwrite(chars + 8, nunChars * 8 - 8, 1, f);
-				}
-				else {
-					fwrite(chars, nunChars * 8, 1, f);
-				}
+				fwrite(chars, nunChars * 8, 1, f);
 				fclose(f);
 			}
 
