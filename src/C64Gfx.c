@@ -547,6 +547,7 @@ int main( int argc, char* argv[] )
 			" * -bundle: combine font data for multiple screens into a single font\n"
 			" * -texthires: hires text picture (enter without params for info)\n"
 			" * -rows: convert to 8 pixels per byte row by row\n"
+			" * -ebcm: extended background color mode (text)\n"
 			" * <no arg>: convert extended color background image (enter without params for info)\n");
 		return 0;
 	}
@@ -1445,6 +1446,161 @@ int main( int argc, char* argv[] )
 
 		free(color);
 		free(bitnap);
+		free(screen);
+		return 0;	
+	}
+	
+	if (GetSwitch("ebcm", swtc, swtn)) {
+		if (argn < 5) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> -out=<out>\n"); return 0; }
+		uint8_t cols[4] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]), (uint8_t)atoi(args[5]) };
+
+		int w, h;
+		uint8_t* img = LoadPicture(args[1], &w, &h);
+
+		if (!img) {
+			printf("Could not open image %s!\n", args[1]);
+			return 1;
+		}
+
+		int wc = w / 8;
+		int hc = h / 8;
+
+		const char* wid = GetSwitch("wid", swtc, swtn);
+		if (wid) { wc = atoi(wid); }
+		const char* hgt = GetSwitch("hgt", swtc, swtn);
+		if (hgt) { hc = atoi(hgt); }
+
+		uint8_t* screen = (uint8_t*)malloc(wc * hc);
+		uint8_t* chars = (uint8_t*)malloc(64 * 8);
+		uint8_t* color = (uint8_t*)malloc(wc * hc);
+
+		int nunChars = 0;	// first char is empty!
+
+		int prevChrCol = 0;
+
+		// prioritize background color 0, then 1 etc.
+		for (int y = 0; y < hc; ++y) {
+			for (int x = 0; x < wc; ++x) {
+				uint8_t bg = 0xff, bgi = 0xff, fg = 0xff, fgi = 0xff;
+				uint8_t* pChr = img + x * 8 + y * 8 * w;
+				for (int yp = 0; yp < 8; ++yp) {
+					for (int xp = 0; xp < 8; ++xp) {
+						uint8_t c = pChr[xp + yp * w];
+						if (c == bg || c == fg) {
+							continue;
+						}
+						uint8_t cbi = 0xff;
+						for (int bi = 0; bi < 4; ++bi) {
+							if (c == cols[bi]) {
+								cbi = bi;
+								break;
+							}
+						}
+						if (bgi > cbi) {
+							if (bgi != 0xff) {
+								fg = bg;
+								fgi = bgi;
+							}
+							bg = c;
+							bgi = cbi;
+						}
+						else {
+							fg = c;
+							fgi = c;
+						}
+					}
+				}
+				uint64_t chrbits;
+				uint8_t* bit8 = (uint8_t*)&chrbits;
+				for (int yp = 0; yp < 8; ++yp) {
+					uint8_t b = 0;
+					for (int xp = 0; xp < 8; ++xp) {
+						uint8_t c = pChr[xp + yp * w];
+						b <<= 1;
+						if (c == fg) { b |= 1; }
+					}
+					bit8[yp] = b;
+				}
+				int n = 0;
+				for (; n < nunChars; ++n) {
+					if (chrbits == *(uint64_t*)(chars + n * 8)) {
+						break;
+					}
+					else if ((~chrbits) == *(uint64_t*)(chars + n * 8)) {
+						if (fgi != 0xff) {
+							bgi = fgi;
+							fgi = bg;
+							bg = fg;
+							fg = fgi;
+							break;
+						}
+					}
+				}
+				if (n >= nunChars) {
+					if (n == 64) { n = 0; fg = 0; bgi = 0; }
+					else {
+						*(uint64_t*)(chars + n * 8) = chrbits;
+						nunChars = n+1;
+					}
+				}
+				color[x + y * wc] = fg == 0xff ? 0 : fg;
+				screen[x + y * wc] = (bgi << 6) | (uint8_t)n;
+			}
+		}
+
+		printf("Used chars for %s = %d\n", args[1], nunChars);
+
+		const char* out = GetSwitch("out", swtc, swtn);
+		if (out) {
+			size_t outLen = strlen(out);
+			char file[_MAX_PATH];
+			const char* extChr = ".chr";
+			const char* extScr = ".scr";
+			const char* extCol = ".col";
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
+			FILE* f;
+			FOpen(f, file, "wb");
+			if (f) {
+				if (GetSwitch("skip0", swtc, swtn)) {
+					fwrite(chars + 8, nunChars * 8 - 8, 1, f);
+				}
+				else {
+					fwrite(chars, nunChars * 8, 1, f);
+				}
+				fclose(f);
+			}
+
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
+			FOpen(f, file, "wb");
+			if (f) {
+				fwrite(screen, wc * hc, 1, f);
+				fclose(f);
+			}
+
+			memcpy(file, out, outLen);
+			memcpy(file + outLen, extCol, sizeof(extCol) + 1);
+			FOpen(f, file, "wb");
+			if (f) {
+				if (!GetSwitch("rawcol", swtc, swtn))
+				{
+					uint8_t* colSrc = color;
+					uint8_t* colDst = color;
+					for (int b = 0; b < (wc * hc); b += 2) {
+						*colDst++ = (colSrc[b] & 0xf) | (colSrc[b + 1] << 4);
+					}
+					fwrite(color, wc * hc / 2, 1, f);
+				}
+				else {
+					fwrite(color, wc * hc, 1, f);
+				}
+				fclose(f);
+			}
+		}
+
+		free(color);
+		free(chars);
 		free(screen);
 		return 0;
 	}
