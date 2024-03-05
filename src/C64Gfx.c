@@ -1451,7 +1451,7 @@ int main( int argc, char* argv[] )
 	}
 	
 	if (GetSwitch("ebcm", swtc, swtn)) {
-		if (argn < 5) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> -out=<out> -rawcol -skip0\n"); return 0; }
+		if (argn < 5) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> -out=<out> -rawcol -skip0 -uniq=<out>\n"); return 0; }
 		uint8_t cols[4] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]), (uint8_t)atoi(args[5]) };
 
 		int w, h;
@@ -1556,6 +1556,49 @@ int main( int argc, char* argv[] )
 		}
 
 		printf("Used chars for %s = %d\n", args[1], nunChars);
+
+		const char* uniq = GetSwitch("uniq", swtc, swtn);
+		if (uniq) {
+			uint8_t* pUniq = (uint8_t*)calloc(1, wc * hc * 8 * 8 * 3);
+			int topChar = -1;
+			for(int yt=0; yt<hc; ++yt) {
+				for(int xt=0; xt<wc; ++xt) {
+					uint8_t* o = pUniq + (xt * 8 + yt * wc * 8 * 8) * 3;
+					uint8_t q = screen[xt + yt * wc];
+					uint8_t b = cols[q >> 6];
+					uint8_t f = color[xt + yt * wc];
+					uint8_t* t = chars + 8 * (q & 0x3f);
+
+					for(int y=0; y<8; ++y) {
+						uint8_t e = *t++;
+						for(int x=0; x<8; ++x) {
+							uint8_t* c = palette[(e & 0x80) ? f : b];
+							for(int i=0; i<3; ++i) {
+								*o++ = *c++;
+							}
+							e <<= 1;
+						}
+						o += (wc - 1) * 8 * 3;
+					}
+					if ((int)(q & 0x3f) > topChar) {
+						topChar = q & 0x3f;
+						o = pUniq + (xt * 8 + yt * wc * 8 * 8) * 3;
+						for(int y=0; y<8; ++y) {
+							uint8_t e = *t++;
+							for(int x=0; x<8; ++x) {
+								for(int i=0; i<3; ++i) {
+									*o++ = 0xff - ((0xff - *o) >> 1);
+								}
+							}
+							o += (wc - 1) * 8 * 3;
+						}
+					}
+				}
+			}
+
+			stbi_write_png(uniq, wc * 8, hc * 8, 3, pUniq, wc*8*3);
+			free(pUniq);
+		}
 
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out) {
