@@ -815,18 +815,18 @@ int main( int argc, char* argv[] )
 		const char* extCol = ".col";
 		const char* extSpr = ".spr";
 		memcpy( file, args[ 2 ], outLen );
-		memcpy( file + outLen, extChr, sizeof( extChr ) + 1 );
+		memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
 		FILE* f;
 		if( FOpen( f, file, "wb" ) ) {
 			fwrite( chrOut, 8*chrWide * chrHgt, 1, f );
 			fclose(f);
 		}
-		memcpy( file + outLen, extCol, sizeof( extCol ) + 1 );
+		memcpy( file + outLen, extCol, strlen( extCol ) + 1 );
 		if( FOpen( f, file, "wb" ) ) {
 			fwrite( chrCol, chrWide * chrHgt, 1, f );
 			fclose( f );
 		}
-		memcpy( file + outLen, extSpr, sizeof( extSpr ) + 1 );
+		memcpy( file + outLen, extSpr, strlen( extSpr ) + 1 );
 		if( FOpen( f, file, "wb" ) ) {
 			fwrite( sprOut, sprWide*sprHgt*64, 1, f );
 			fclose( f );
@@ -857,7 +857,12 @@ int main( int argc, char* argv[] )
 			}
 		}
 		FILE* f = 0;
+#ifdef _WIN32
 		if (fopen_s(&f, args[2], "wb") == 0) {
+#else
+		f = fopen(args[2], "wb");
+		if (f) {
+#endif
 			fwrite(dest, wc * h, 1, f);
 			fclose(f);
 		}
@@ -1152,7 +1157,7 @@ int main( int argc, char* argv[] )
 			const char* extChr = ".chr";
 			const char* extScr = ".scr";
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
+			memcpy(file + outLen, extChr, strlen(extChr) + 1);
 			FILE* f;
 			FOpen(f, file, "wb");
 			if (f) {
@@ -1161,7 +1166,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
+			memcpy(file + outLen, extScr, strlen(extScr) + 1);
 			FOpen(f, file, "wb");
 			if (f) {
 				fwrite(screen, wid * hgt, 1, f);
@@ -1195,7 +1200,7 @@ int main( int argc, char* argv[] )
 			char file[_MAX_PATH];
 			const char* extPng = ".png";
 			memcpy(file, png, pngLen);
-			memcpy(file + pngLen, extPng, sizeof(extPng) + 1);
+			memcpy(file + pngLen, extPng, strlen(extPng) + 1);
 			//STBIWDEF int stbi_write_png(char const *filename, int x, int y, int comp, const void *data, int stride_bytes)
 			stbi_write_png(png, wid*8, hgt*8, 3, png_image, wid * 8 * 3);
 			free(png_image);
@@ -1410,7 +1415,7 @@ int main( int argc, char* argv[] )
 			const char* extScr = ".scr";
 			const char* extCol = ".col";
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
+			memcpy(file + outLen, extChr, strlen(extChr) + 1);
 			FILE* f;
 			FOpen(f, file, "wb");
 			if (f) {
@@ -1419,7 +1424,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
+			memcpy(file + outLen, extScr, strlen(extScr) + 1);
 			FOpen(f, file, "wb");
 			if (f) {
 				fwrite(screen, wc * hc * repeat, 1, f);
@@ -1427,7 +1432,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extCol, sizeof(extCol) + 1);
+			memcpy(file + outLen, extCol, strlen(extCol) + 1);
 			FOpen(f, file, "wb");
 			if (f) {
 				if (!GetSwitch("rawcol", swtc, swtn)) {
@@ -1608,7 +1613,7 @@ int main( int argc, char* argv[] )
 			const char* extScr = ".scr";
 			const char* extCol = ".col";
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extChr, sizeof(extChr) + 1);
+			memcpy(file + outLen, extChr, strlen(extChr) + 1);
 			FILE* f;
 			FOpen(f, file, "wb");
 			if (f) {
@@ -1617,7 +1622,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extScr, sizeof(extScr) + 1);
+			memcpy(file + outLen, extScr, strlen(extScr) + 1);
 			FOpen(f, file, "wb");
 			if (f) {
 				fwrite(screen, wc * hc, 1, f);
@@ -1625,7 +1630,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy(file, out, outLen);
-			memcpy(file + outLen, extCol, sizeof(extCol) + 1);
+			memcpy(file + outLen, extCol, strlen(extCol) + 1);
 			FOpen(f, file, "wb");
 			if (f) {
 				if (!GetSwitch("rawcol", swtc, swtn))
@@ -1734,7 +1739,7 @@ int main( int argc, char* argv[] )
 			const char* extScr = ".scr";
 			const char* extCol = ".col";
 			memcpy( file, out, outLen );
-			memcpy( file + outLen, extChr, sizeof( extChr ) + 1 );
+			memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
 			FILE* f;
 			FOpen(f, file, "wb" );
 			if( f ) {
@@ -1748,7 +1753,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy( file, out, outLen );
-			memcpy( file + outLen, extScr, sizeof( extScr ) + 1 );
+			memcpy( file + outLen, extScr, strlen( extScr ) + 1 );
 			FOpen(f, file, "wb" );
 			if( f ) {
 				fwrite( screen, wc*hc, 1, f );
@@ -1756,7 +1761,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy( file, out, outLen );
-			memcpy( file + outLen, extCol, sizeof( extCol ) + 1 );
+			memcpy( file + outLen, extCol, strlen( extCol ) + 1 );
 			FOpen(f, file, "wb" );
 			if( f ) {
 				if( !GetSwitch( "rawcol", swtc, swtn ) )
@@ -1804,11 +1809,11 @@ int main( int argc, char* argv[] )
 			uint8_t ecm = 0;
 			if( args[i][0] == '*' ) {
 				memcpy( file, args[ i ]+1, strlen( args[ i ] )-1 );
-				memcpy( file + strlen( args[ i ] )-1, chrExt, sizeof( chrExt ) + 1 );
+				memcpy( file + strlen( args[ i ] )-1, chrExt, strlen( chrExt ) + 1 );
 				ecm = 1;
 			} else {
 				memcpy( file, args[ i ], strlen( args[ i ] ) );
-				memcpy( file + strlen( args[ i ] ), imapExt, sizeof( imapExt ) + 1 );
+				memcpy( file + strlen( args[ i ] ), imapExt, strlen( imapExt ) + 1 );
 			}
 			FILE* f;
 			FOpen(f, file, "wb" );
@@ -1822,8 +1827,8 @@ int main( int argc, char* argv[] )
 
 				size_t added_size = 0;
 
-				if( args[i][0] == '*' ) { memcpy( file + strlen( args[ i ] )-1, scrExt, sizeof( scrExt ) + 1 ); }
-				else { memcpy( file + strlen( args[ i ] ), iscrExt, sizeof( iscrExt ) + 1 ); }
+				if( args[i][0] == '*' ) { memcpy( file + strlen( args[ i ] )-1, scrExt, strlen( scrExt ) + 1 ); }
+				else { memcpy( file + strlen( args[ i ] ), iscrExt, strlen( iscrExt ) + 1 ); }
 				FILE* f;
 				FOpen(f, file, "wb" );
 				if( f ) {
@@ -1881,10 +1886,10 @@ int main( int argc, char* argv[] )
 
 					if( ecm ) {
 						memcpy( file, args[ i ]+1, strlen( args[ i ] )-1 );
-						memcpy( file + strlen( args[ i ] )-1, oscrExt, sizeof( oscrExt ) + 1 );
+						memcpy( file + strlen( args[ i ] )-1, oscrExt, strlen( oscrExt ) + 1 );
 					} else {
 						memcpy( file, args[ i ], strlen( args[ i ] ) );
-						memcpy( file + strlen( args[ i ] ), oscrExt, sizeof( oscrExt ) + 1 );
+						memcpy( file + strlen( args[ i ] ), oscrExt, strlen( oscrExt ) + 1 );
 					}
 					FILE* f;
 					FOpen(f, file, "wb" );
@@ -1932,7 +1937,7 @@ int main( int argc, char* argv[] )
 
 		for( int i = 2; i < argn; ++i ) {
 			memcpy( file, args[i], strlen(args[i]) );
-			memcpy( file + strlen( args[ i ] ), extChr, sizeof( extChr ) + 1 );
+			memcpy( file + strlen( args[ i ] ), extChr, strlen( extChr ) + 1 );
 			FILE* f;
 			FOpen(f, file, "wb" );
 			if( f ) {
@@ -1973,7 +1978,7 @@ int main( int argc, char* argv[] )
 					cmp += 8;
 				}
 				memcpy( file, args[ i ], strlen( args[ i ] ) );
-				memcpy( file + strlen( args[ i ] ), extChrMap, sizeof( extChrMap ) + 1 );
+				memcpy( file + strlen( args[ i ] ), extChrMap, strlen( extChrMap ) + 1 );
 				FILE* f;
 				FOpen(f, file, "wb" );
 				if( f ) {
@@ -2213,7 +2218,7 @@ int main( int argc, char* argv[] )
 			const char* extScr = ".scr";
 			const char* extCol = ".col";
 			memcpy( file, out, outLen );
-			memcpy( file + outLen, extChr, sizeof( extChr ) + 1 );
+			memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
 			FILE* f;
 			FOpen(f, file, "wb" );
 			if( f ) {
@@ -2226,7 +2231,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy( file, out, outLen );
-			memcpy( file + outLen, extScr, sizeof( extScr ) + 1 );
+			memcpy( file + outLen, extScr, strlen( extScr ) + 1 );
 			FOpen(f, file, "wb" );
 			if( f ) {
 				fwrite( screen, wc*hc, 1, f );
@@ -2234,7 +2239,7 @@ int main( int argc, char* argv[] )
 			}
 
 			memcpy( file, out, outLen );
-			memcpy( file + outLen, extCol, sizeof( extCol ) + 1 );
+			memcpy( file + outLen, extCol, strlen( extCol ) + 1 );
 			FOpen(f, file, "wb" );
 			if( f ) {
 				if( !GetSwitch( "rawcol", swtc, swtn ) )
