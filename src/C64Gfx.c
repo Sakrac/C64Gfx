@@ -231,7 +231,6 @@ struct float3 HSL2RGB( struct float3 hsl )
 	float x = c * (1 - fabsf( fmodf( hsl.x, 2.0f ) - 1.0f ) );
 	float m = hsl.z - 0.5f*c;
 	struct float3 rgb;
-	float H = fmodf( hsl.z + 6.0f, 6.0f );
 	if( hsl.x < 1 ) { rgb.x = c; rgb.y = x; rgb.z = 0; }
 	else if( hsl.x < 2 ) { rgb.x = x; rgb.y = c; rgb.z = 0; }
 	else if( hsl.x < 3 ) { rgb.x = 0; rgb.y = c; rgb.z = x; }
@@ -295,7 +294,6 @@ const int sprw = 24;
 const int sprh = 21;
 int FindSprite(uint8_t* img, int w, int h, uint8_t bg, uint8_t col, uint8_t mc1, uint8_t mc2, uint8_t* out, int* offs )
 {
-	uint8_t* pix = img;
 	uint8_t sc = 0xff;
 
 	for (int y = 0; y<h; ++y) {
@@ -513,10 +511,9 @@ int main( int argc, char* argv[] )
 		else { args[ argn++ ] = argv[ a ]; }
 	}
 
-	char currDir[512];
-
 	if (GetSwitch("dir",swtc,swtn)) {
 		#ifdef _WIN32
+			char currDir[512];
 			GetCurrentDirectory(sizeof(currDir), currDir);
 			printf("%s\n", currDir);
 		#else
@@ -532,23 +529,23 @@ int main( int argc, char* argv[] )
 		printf(
 			"gfx [-palette=<image>] -{type} <source image> [additional type params]\n"
 			"types:\n"
-			" * -spiral: custom demo effect\n"
-			" * -fade2: custom demo effect\n"
-			" * -fadecols: custom demo effect\n"
-			" * -charspr: i don't quite remember\n"
+			" * -spiral: generate ordered spiral fade table\n"
+			" * -fade2: generate 8-step palette fade table\n"
+			" * -fadecols: generate 16-step per-color fade table\n"
+			" * -charspr: split image into char/sprite data\n"
 			" * -columns: export custom columns (enter without params for info)\n"
-			" * -bobfont: custom demo format font\n"
-			" * -agnus: custom demo effect\n"
+			" * -bobfont: export bob font .bin + .wid\n"
+			" * -agnus: export 2x2 packed grayscale data\n"
 			" * -textmc: multicolor text picture (enter without params for info)\n"
 			" * -bitmap: hires bitmap (enter without params for info)\n"
 			" * -bitmapmc: multicolor bitmap (enter without params for info)\n"
 			" * -multisprite: export a large sprite cut up into hardware sprites (enter without params for info)\n"
-			" * -screens: i don't remember\n"
+			" * -screens: merge multiple screen/charset sets into one charset\n"
 			" * -bundle: combine font data for multiple screens into a single font\n"
 			" * -texthires: hires text picture (enter without params for info)\n"
 			" * -rows: convert to 8 pixels per byte row by row\n"
 			" * -ebcm: extended background color mode (text)\n"
-			" * <no arg>: convert extended color background image (enter without params for info)\n");
+			" * <no arg>: convert EBCM image from 4 background colors\n");
 		return 0;
 	}
 
@@ -732,7 +729,7 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "charspr", swtc, swtn ) )
 	{
-		if( argn < 4 ) { printf( "Usage:\nGfx -charspr <image> <out> <bg color> <sprite color>\n" ); return 0; }
+		if( argn < 5 ) { printf( "Usage:\nGfx -charspr <image> <out> <bg color> <sprite color>\n" ); return 0; }
 		int w, h;
 		uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
 		if( !img ) { printf("Failed to load image %s\n", args[1] ); return 1; }
@@ -843,6 +840,10 @@ int main( int argc, char* argv[] )
 		}
 		int w, h;
 		uint8_t* img = LoadPicture(args[1], &w, &h);
+		if (!img) {
+			printf("Error: Could not open image \"%s\"\n", args[1]);
+			return 1;
+		}
 		int wc = w / 8;
 		int col = atoi(args[3]);
 		uint8_t* dest = (uint8_t*)calloc(1,wc * h), *o = dest;
@@ -874,15 +875,18 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "columns", swtc, swtn ) )
 	{
-		if( argn < 5 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11] [-oc=col] [-oci=col]\n"
+		if( argn < 6 ) { printf( "Usage:\nGfx -columns <image> <out> <bg> count dim [-mc=col01,col10,col11] [-oc=col] [-oci=col] [-pad=x]\n"
 								 " * image: input\n * out: output\n * bg: background color\n * count: NxN or N number of frames\n"
 								 " * dim: NxN bytes X lines\n * -mc: multcolors for bit pairs 01, 10, 11\n"
 								 " * oc: outline sprite color, separate file\n * oci: outline sprite color, interleaved in same file\n"); return 0; }
 		int w, h;
 		uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
+		if( !img ) {
+			printf( "Error: Could not open image \"%s\"\n", args[1] );
+			return 1;
+		}
 
 		int wc = w / 8;
-		int hc = h / 8;
 
 		char *endStr;
 		uint8_t bg = ( uint8_t )strtoul( args[ 3 ], &endStr, 10 );
@@ -1016,7 +1020,7 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "bobfont", swtc, swtn ) )
 	{
-		if( argn < 3 ) { printf( "Usage:\nGfx -bobfont <src> <out> <chars>\n" ); return 0; }
+		if( argn < 4 ) { printf( "Usage:\nGfx -bobfont <src> <out> <chars>\n" ); return 0; }
 		int w, h;
 		uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
 		if( !img ) { printf( "could not open %s\n", args[ 1 ] ); return 1; }
@@ -1058,7 +1062,7 @@ int main( int argc, char* argv[] )
 	{
 		if( argn < 3 ) { printf( "Usage:\nGfx -agnus <image> <out>\n" ); return 0; }
 		int w, h, n;
-		uint8_t *raw = stbi_load( args[1], &w, &h, &n, 0 ), *src = raw;
+		uint8_t *raw = stbi_load( args[1], &w, &h, &n, 0 );
 		if( raw ) {
 			uint8_t* outbuf = (uint8_t*)malloc( (w / 2) * (h / 2) ), *out = outbuf;
 			for( int y = 0, ny = h / 2; y < ny; ++y ) {
@@ -1094,7 +1098,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmap", swtc, swtn)) {
-		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>/-png=<png>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
+		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>] [-png=<png>] [-dither=<1-64>]\n"); return 0; }
 		int w, h;
 		uint8_t* img = 0;
 
@@ -1106,6 +1110,10 @@ int main( int argc, char* argv[] )
 			}
 		}
 		if (!img) { img = LoadPicture(args[1], &w, &h); }
+		if (!img) {
+			printf("Error: Could not open image \"%s\"\n", args[1]);
+			return 1;
+		}
 
 		int wid = (w+7)/8, hgt = (h+7)/8;
 
@@ -1113,12 +1121,15 @@ int main( int argc, char* argv[] )
 		uint8_t* bitmap = (uint8_t*)calloc(1, wid * hgt * 8);
 
 		for (int y = 0; y < hgt; ++y) {
-			const uint8_t* pc = img + y * 8 * w;
 			for (int x = 0; x<wid; ++x) {
 				uint8_t hist[16]; memset(hist, 0, sizeof(hist));
 				for(int cy=0; cy<8; ++cy) {
+					int py = y * 8 + cy;
+					if (py >= h) { continue; }
 					for(int cx=0; cx<8; ++cx) {
-						hist[pc[cy * w + cx]&0xf]++;
+						int px = x * 8 + cx;
+						if (px >= w) { continue; }
+						hist[img[py * w + px] & 0xf]++;
 					}
 				}
 				uint8_t col[2] = { 0,0 }, cnt[2] = { 0, 0 };
@@ -1135,10 +1146,12 @@ int main( int argc, char* argv[] )
 				}
 				screen[y * wid + x] = col[0] | (col[1] << 4);
 				for(int cy=0; cy<8; ++cy) {
+					int py = y * 8 + cy;
 					uint8_t b = 0;
 					for(int cx=0; cx<8; ++cx) {
+						int px = x * 8 + cx;
 						b = (b << 1);
-						uint8_t c = pc[cy * w + cx]&0xf;
+						uint8_t c = (py < h && px < w) ? (img[py * w + px] & 0xf) : col[0];
 						if (c != col[0] && c != col[1]) {
 							c = ClosestColor(c, col, 2);
 						}
@@ -1146,9 +1159,7 @@ int main( int argc, char* argv[] )
 					}
 					bitmap[(y * wid + x) * 8 + cy] = b;
 				}
-				pc += 8;
 			}
-			pc -= 8 * wid + w;
 		}
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out) {
@@ -1213,7 +1224,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>/-koala=<koala>/-png=<png>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>] [-koala=<koala-file>] [-png=<png-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 
 		int w, h;
 		uint8_t* img = 0;
@@ -1226,6 +1237,10 @@ int main( int argc, char* argv[] )
 			}
 		}
 		if (!img) { img = LoadPicture(args[1], &w, &h); }
+		if (!img) {
+			printf("Error: Could not open image \"%s\"\n", args[1]);
+			return 1;
+		}
 		
 		uint8_t bg = (uint8_t)atoi(args[2]);
 
@@ -1456,7 +1471,7 @@ int main( int argc, char* argv[] )
 	}
 	
 	if (GetSwitch("ebcm", swtc, swtn)) {
-		if (argn < 5) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> -out=<out> -rawcol -skip0 -uniq=<out>\n"); return 0; }
+		if (argn < 6) { printf("Usage:\nGfx -ebcm <image> <bg0> <bg1> <bg2> <bg3> [-out=<out>] [-rawcol] [-skip0] [-uniq=<png>] [-wid=char width] [-hgt=char height]\n"); return 0; }
 		uint8_t cols[4] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]), (uint8_t)atoi(args[5]) };
 
 		int w, h;
@@ -1480,8 +1495,6 @@ int main( int argc, char* argv[] )
 		uint8_t* color = (uint8_t*)malloc(wc * hc);
 
 		int nunChars = 0;
-
-		int prevChrCol = 0;
 
 		uint8_t skip0 = !!GetSwitch("skip0", swtc, swtn);
 
@@ -1589,10 +1602,11 @@ int main( int argc, char* argv[] )
 						topChar = q & 0x3f;
 						o = pUniq + (xt * 8 + yt * wc * 8 * 8) * 3;
 						for(int y=0; y<8; ++y) {
-							uint8_t e = *t++;
+							++t;
 							for(int x=0; x<8; ++x) {
 								for(int i=0; i<3; ++i) {
-									*o++ = 0xff - ((0xff - *o) >> 1);
+									uint8_t prev = *o;
+									*o++ = (uint8_t)(0xff - ((0xff - prev) >> 1));
 								}
 							}
 							o += (wc - 1) * 8 * 3;
@@ -1662,6 +1676,10 @@ int main( int argc, char* argv[] )
 
 		int w, h;
 		uint8_t* img = LoadPicture(args[1], &w, &h);
+		if (!img) {
+			printf("Error: Could not open image \"%s\"\n", args[1]);
+			return 1;
+		}
 
 		int wc = w / 8;
 		int hc = h / 8;
@@ -1741,7 +1759,7 @@ int main( int argc, char* argv[] )
 			memcpy( file, out, outLen );
 			memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
 			FILE* f;
-			FOpen(f, file, "wb" );
+			FOpen(f, file, "rb" );
 			if( f ) {
 				if( GetSwitch( "skip0", swtc, swtn ) ) {
 					fwrite( chars + 8, nunChars * 8 - 8, 1, f );
@@ -1792,7 +1810,7 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "screens", swtc, swtn ) )
 	{
-		if( argn < 2 ) { printf( "Usage:\nGfx -screens <out> <in-.imap.iscr 1> <in-.imap.iscr 2> <in-.imap.iscr 3>\n" ); return 0; }
+		if( argn < 3 ) { printf( "Usage:\nGfx -screens <out.chr> <in1> [in2] [in3] ...\n * uses <in>.chr + <in>.scr\n * prefix input with '*' for EBCM set\n" ); return 0; }
 		const char* out = args[ 1 ];
 		char file[ _MAX_PATH ];
 		uint8_t refd[ 256 ];
@@ -1830,7 +1848,7 @@ int main( int argc, char* argv[] )
 				if( args[i][0] == '*' ) { memcpy( file + strlen( args[ i ] )-1, scrExt, strlen( scrExt ) + 1 ); }
 				else { memcpy( file + strlen( args[ i ] ), iscrExt, strlen( iscrExt ) + 1 ); }
 				FILE* f;
-				FOpen(f, file, "wb" );
+				FOpen(f, file, "rb" );
 				if( f ) {
 					fseek( f, 0, SEEK_END );
 					size_t sizeScrn = ftell( f );
@@ -1913,7 +1931,7 @@ int main( int argc, char* argv[] )
 		}
 		if( !err ) {
 			FILE* f;
-			FOpen(f, file, "wb" );
+			FOpen(f, file, "rb" );
 			if( f ) {
 				fwrite( all, numChr * 8, 1, f );
 				fclose( f );
@@ -1926,7 +1944,7 @@ int main( int argc, char* argv[] )
 
 	if( GetSwitch( "bundle", swtc, swtn ) )
 	{
-		if( argn < 2 ) { printf( "Usage:\nGfx -bundle <out> <in set 1> <in set 2> <in set 3>\n"); return 0; }
+		if( argn < 3 ) { printf( "Usage:\nGfx -bundle <out.chr> <in1> [in2] [in3] ...\n * reads <in>.chr and writes <in>.chrmap\n" ); return 0; }
 		const char* out = args[1];
 		char file[ _MAX_PATH ];
 		const char* extChr = ".chr";
@@ -1950,7 +1968,6 @@ int main( int argc, char* argv[] )
 
 				uint8_t* map = (uint8_t*)malloc( size / 8 );
 				uint8_t* cmp = data;
-				int matches = 0;
 				for( size_t c = 0, n = size / 8; c < n; ++c ) {
 					uint8_t* chr = all;
 					uint8_t found = 0;
@@ -2008,9 +2025,13 @@ int main( int argc, char* argv[] )
 
 	if (GetSwitch("texthires", swtc, swtn)) {
 		int w, h;
-		if (argn <= 1) { printf("Usage:\nGfx -texthires [-bg=col] [-out=file] [-skip0] [-rawcol]\n * creates .chr, .scr, .col files\n"); return 0; }
+		if (argn <= 1) { printf("Usage:\nGfx -texthires <image> [-bg=col] [-out=file] [-skip0] [-rawcol]\n * creates .chr, .scr, .col files\n"); return 0; }
 
 		uint8_t* img = LoadPicture(args[1], &w, &h);
+		if (!img) {
+			printf("Error: Could not open image \"%s\"\n", args[1]);
+			return 1;
+		}
 
 		int wc = w/8;
 		int hc = h/8;
@@ -2124,7 +2145,7 @@ int main( int argc, char* argv[] )
 
 
 	if( argn < 6 ) {
-		printf( "Usage:\nGfx img.png bg0 bg1 bg2 bg3\n" );
+		printf( "Usage:\nGfx <image> <bg0> <bg1> <bg2> <bg3> [-out=<out>] [-skip0] [-rawcol]\n" );
 		return 0;
 	}
 
@@ -2134,6 +2155,10 @@ int main( int argc, char* argv[] )
 
 	int w, h;
 	uint8_t* img = LoadPicture( args[ 1 ], &w, &h );
+	if( !img ) {
+		printf("Error: Could not open image \"%s\"\n", args[1]);
+		return 1;
+	}
 
 	int wc = w / 8;
 	int hc = h / 8;
