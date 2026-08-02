@@ -1,0 +1,234 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-ninja-clang-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-clang-debug",
+      "displayName": "Windows Clang (Ninja) Debug",
+      "inherits": "windows-ninja-clang-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -g"
+      }
+    },
+    {
+      "name": "windows-clang-release",
+      "displayName": "Windows Clang (Ninja) Release",
+      "inherits": "windows-ninja-clang-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -O2"
+      }
+    },
+    {
+      "name": "windows-vs-base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-vs-msvc",
+      "displayName": "Windows MSVC (Visual Studio)",
+      "inherits": "windows-vs-base"
+    },
+    {
+      "name": "windows-vs-clangcl",
+      "displayName": "Windows ClangCL (Visual Studio)",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl"
+      }
+    },
+    {
+      "name": "windows-vs-msvc-x86",
+      "displayName": "Windows MSVC x86 (Visual Studio)",
+      "inherits": "windows-vs-base",
+      "architecture": {
+        "value": "Win32",
+        "strategy": "set"
+      }
+    },
+    {
+      "name": "windows-vs-clangcl-x86",
+      "displayName": "Windows ClangCL x86 (Visual Studio)",
+      "inherits": "windows-vs-base",
+      "architecture": {
+        "value": "Win32",
+        "strategy": "set"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl"
+      }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang"
+      }
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Clang Debug",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -g"
+      }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Clang Release",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -O2"
+      }
+    },
+    {
+      "name": "macos-debug",
+      "displayName": "macOS Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -g"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
+        }
+      }
+    },
+    {
+      "name": "macos-release",
+      "displayName": "macOS Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -O2"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
+        }
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release"
+    },
+    {
+      "name": "windows-clang-debug",
+      "configurePreset": "windows-clang-debug"
+    },
+    {
+      "name": "windows-clang-release",
+      "configurePreset": "windows-clang-release"
+    },
+    {
+      "name": "windows-vs-msvc-debug",
+      "configurePreset": "windows-vs-msvc",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs-msvc-release",
+      "configurePreset": "windows-vs-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-vs-clangcl-debug",
+      "configurePreset": "windows-vs-clangcl",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs-clangcl-release",
+      "configurePreset": "windows-vs-clangcl",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-vs-msvc-x86-debug",
+      "configurePreset": "windows-vs-msvc-x86",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs-msvc-x86-release",
+      "configurePreset": "windows-vs-msvc-x86",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-vs-clangcl-x86-debug",
+      "configurePreset": "windows-vs-clangcl-x86",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs-clangcl-x86-release",
+      "configurePreset": "windows-vs-clangcl-x86",
+      "configuration": "Release"
+    }
+  ]
+}
