@@ -1,7 +1,7 @@
 # C64Gfx
 Utility to convert image files to C64 binary files
 
-Find the current binary in [releases](releases)
+Find the current binary in [releases](https://github.com/Sakrac/C64Gfx/releases)
 
 ## Usage
 
