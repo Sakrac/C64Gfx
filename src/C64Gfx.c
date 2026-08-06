@@ -11,6 +11,7 @@
 #else
 #include <unistd.h>
 #endif
+#include "gpx_load.h"
 
 #define MAX_ARGS 32
 #define INV_255 ( 1.0f / 255.0f )
@@ -85,6 +86,56 @@ int ClosestColor(int c, uint8_t* options, int num)
 
 uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 {
+	// if file a gpx?
+	const char* ext = strrchr(file, '.');
+	if (ext && StrNCmp(ext, ".gpx", 4) == 0) {
+
+		FILE* f;
+		size_t gpxSize = 0;
+		if (!FOpen(f, file, "rb")) {
+			return NULL;
+		}
+		fseek(f, 0, SEEK_END);
+		gpxSize = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		uint8_t* gpxData = (uint8_t*)malloc(gpxSize);
+		if (!gpxData) {
+			fclose(f);
+			return NULL;
+		}
+		fread(gpxData, 1, gpxSize, f);
+		fclose(f);
+
+		uint8_t* pPixels = NULL;
+		size_t PixelsSize = 0;
+		gpx_info info = { 0 };
+		gpx_status success = parse_gpx(gpxData, gpxSize, &info, &pPixels, &PixelsSize);
+		free(gpxData);
+
+		if (success != GPX_OK) {
+			printf("Failed to parse GPX file %s: %s\n", file, gpx_status_to_string(success));
+			if (pPixels) free(pPixels);
+			return NULL;
+		}
+
+		uint8_t* pIndexedPixels = NULL;
+		size_t IndexedPixelsSize = 0;
+		gpx_status buildSuccess = gpx_build_indexed_bitmap(pPixels, PixelsSize, &info, &pIndexedPixels, &IndexedPixelsSize);
+		free(pPixels);
+		if (buildSuccess != GPX_OK) {
+			printf("Failed to build indexed bitmap for GPX file %s: %s\n", file, gpx_status_to_string(buildSuccess));
+			if (pIndexedPixels) free(pIndexedPixels);
+			return NULL;
+		}
+
+		int mcs = (info.mode == GPX_MODE_MULTICOLOR_BITMAP || info.mode == GPX_MODE_MULTICOLOR_CHAR || info.mode == GPX_MODE_MULTICOLOR_SPRITE) ? 2 : 1;
+
+		if (wr) { *wr = info.xsize * mcs; }
+		if (hr) { *hr = info.ysize; }
+		return pIndexedPixels;
+	}
+
+
 	int w, h, n;
 	uint8_t *raw = stbi_load( file, &w, &h, &n, 0 ), *src = raw;
 	if (!raw) { return 0; }
@@ -409,7 +460,7 @@ int MultiSprite(const char** args, int argn, char** swtc, int swtn)
 	// check for overlay sprites if specified
 	const char* ovlstr = GetSwitch("overlay", swtc, swtn);
 	if (ovlstr) {
-		uint8_t ovlc = atoi(ovlstr);
+		uint8_t ovlc = (uint8_t)atoi(ovlstr);
 		printf("Finding sprites in %s (%d, %d) with an overlay color of %d and multicolors %d and %d\n", args[1], w, h, ovlc, cols[1], cols[2]);
 		int found = 1;
 		while (found) {
@@ -718,7 +769,7 @@ int main( int argc, char* argv[] )
 						b = m;
 					}
 				}
-				fades[ c ][ f ] = b;
+				fades[ c ][ f ] = (uint8_t)b;
 				if( f ) { printf( "," ); }
 				printf( " $%02x", b );
 			}
@@ -765,7 +816,7 @@ int main( int argc, char* argv[] )
 						}
 					}
 				}
-				chrCol[x + y * chrWide] = bestCol;
+				chrCol[x + y * chrWide] = (uint8_t)bestCol;
 			}
 		}
 		// set up the char data
@@ -1041,7 +1092,7 @@ int main( int argc, char* argv[] )
 				if( byte ) { last = y; }
 				buf[ c ][ y ] = byte;
 			}
-			widths[ c ] = last + 1;
+			widths[ c ] = (uint8_t)(last + 1);
 		}
 		FILE *f;
 		char name[ _MAX_PATH ];
@@ -1099,7 +1150,7 @@ int main( int argc, char* argv[] )
 
 	if (GetSwitch("bitmap", swtc, swtn)) {
 		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>] [-png=<png>] [-dither=<1-64>]\n"); return 0; }
-		int w, h;
+		int w=1, h=1;
 		uint8_t* img = 0;
 
 		const char* ditherStr = GetSwitch("dither", swtc, swtn);
@@ -1136,13 +1187,13 @@ int main( int argc, char* argv[] )
 				for(int c=0; c<16; ++c) {
 					if(hist[c]>cnt[0]) {
 						col[1] = col[0]; cnt[1] = col[0];
-						col[0] = c; cnt[0] = hist[c];
+						col[0] = (uint8_t)c; cnt[0] = hist[c];
 					} else if(hist[c]>cnt[1]) {
-						col[1] = c; cnt[1] = hist[c];
+						col[1] = (uint8_t)c; cnt[1] = hist[c];
 					}
 				}
 				if(col[0]<col[1]) {
-					int t = col[0]; col[0] = col[1]; col[1] = t;
+					int t = col[0]; col[0] = col[1]; col[1] = (uint8_t)t;
 				}
 				screen[y * wid + x] = col[0] | (col[1] << 4);
 				for(int cy=0; cy<8; ++cy) {
@@ -1153,7 +1204,7 @@ int main( int argc, char* argv[] )
 						b = (b << 1);
 						uint8_t c = (py < h && px < w) ? (img[py * w + px] & 0xf) : col[0];
 						if (c != col[0] && c != col[1]) {
-							c = ClosestColor(c, col, 2);
+							c = (uint8_t)ClosestColor(c, col, 2);
 						}
 						if (c == col[1]) { b |= 1; }
 					}
@@ -1226,7 +1277,7 @@ int main( int argc, char* argv[] )
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
 		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>] [-koala=<koala-file>] [-png=<png-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 
-		int w, h;
+		int w = 1, h = 1;
 		uint8_t* img = 0;
 
 		const char* ditherStr = GetSwitch("dither", swtc, swtn);
@@ -1359,7 +1410,7 @@ int main( int argc, char* argv[] )
 //							uint8_t c = s[xp + yp * w];
 							b <<= 2;
 							if (c != bg) {
-								if (c != col[1] && c != col[2] && c != col[3]) { c = ClosestColor(c, col, 4); }
+								if (c != col[1] && c != col[2] && c != col[3]) { c = (uint8_t)ClosestColor(c, col, 4); }
 								if (c == col[1]) { b |= 2; } else if (c == col[2]) { b |= 1; } else if (c == col[3]) { b |= 3; }
 							}
 						}
@@ -1512,7 +1563,7 @@ int main( int argc, char* argv[] )
 						uint8_t cbi = 0xff;
 						for (int bi = 0; bi < 4; ++bi) {
 							if (c == cols[bi]) {
-								cbi = bi;
+								cbi = (uint8_t)bi;
 								break;
 							}
 						}
@@ -1712,7 +1763,7 @@ int main( int argc, char* argv[] )
 						}
 					}
 				}
-				color[ y * wc + x ] = chrCol >= 0 ? ( chrCol | 8 ) : ( prevChrCol | 8 );
+				color[ y * wc + x ] = chrCol >= 0 ? (uint8_t)( chrCol | 8 ) : (uint8_t)( prevChrCol | 8 );
 				if( chrCol > 0 ) { prevChrCol = chrCol; }
 				uint8_t chr[ 8 ] = { 0 };
 				for( int yp = 0; yp < 8; ++yp ) {
@@ -1744,7 +1795,7 @@ int main( int argc, char* argv[] )
 					}
 					else { c = 0; }
 				}
-				screen[ x + y * wc ] = c;
+				screen[ x + y * wc ] = (uint8_t)c;
 			}
 		}
 		printf( "Used chars for %s = %d\n", args[1], nunChars );
@@ -1847,16 +1898,16 @@ int main( int argc, char* argv[] )
 
 				if( args[i][0] == '*' ) { memcpy( file + strlen( args[ i ] )-1, scrExt, strlen( scrExt ) + 1 ); }
 				else { memcpy( file + strlen( args[ i ] ), iscrExt, strlen( iscrExt ) + 1 ); }
-				FILE* f;
-				FOpen(f, file, "rb" );
-				if( f ) {
-					fseek( f, 0, SEEK_END );
-					size_t sizeScrn = ftell( f );
-					fseek( f, 0, SEEK_SET );
+				FILE* f2;
+				FOpen(f2, file, "rb" );
+				if( f2 ) {
+					fseek( f2, 0, SEEK_END );
+					size_t sizeScrn = ftell( f2 );
+					fseek( f2, 0, SEEK_SET );
 					uint8_t* scrn = (uint8_t*)malloc( sizeScrn );
 					uint8_t* scrn2 = (uint8_t*)malloc( sizeScrn );
-					fread( scrn, sizeScrn, 1, f );
-					fclose( f );
+					fread( scrn, sizeScrn, 1, f2 );
+					fclose( f2 );
 
 					memset( refd, 0, sizeof( refd ) );
 
@@ -1881,7 +1932,7 @@ int main( int argc, char* argv[] )
 								chr += 8;
 							}
 							if( !found ) {
-								index = numChr;
+								index = (uint8_t)numChr;
 								if( numChr < 256 ) {
 									uint8_t *newChr = all + (numChr << 3);
 									for( int r = 0; r < 8; ++r ) {
@@ -1909,11 +1960,11 @@ int main( int argc, char* argv[] )
 						memcpy( file, args[ i ], strlen( args[ i ] ) );
 						memcpy( file + strlen( args[ i ] ), oscrExt, strlen( oscrExt ) + 1 );
 					}
-					FILE* f;
-					FOpen(f, file, "wb" );
-					if( f ) {
-						fwrite( scrn2, sizeScrn, 1, f );
-						fclose( f );
+					FILE* f3;
+					FOpen(f3, file, "wb" );
+					if( f3 ) {
+						fwrite( scrn2, sizeScrn, 1, f3 );
+						fclose( f3 );
 					}
 					else {
 						printf( "Could not open file %s for writing!\n", file );
@@ -1984,7 +2035,7 @@ int main( int argc, char* argv[] )
 						chr += 8;
 					}
 					if( !found ) {
-						map[ c ] = numChr;
+						map[ c ] = (uint8_t)numChr;
 						if( numChr < 256 ) {
 							for( int r = 0; r < 8; ++r ) {
 								all[ ( numChr<<3 ) + r ] = cmp[ r ];
@@ -1996,11 +2047,11 @@ int main( int argc, char* argv[] )
 				}
 				memcpy( file, args[ i ], strlen( args[ i ] ) );
 				memcpy( file + strlen( args[ i ] ), extChrMap, strlen( extChrMap ) + 1 );
-				FILE* f;
-				FOpen(f, file, "wb" );
-				if( f ) {
-					fwrite( map, size/8, 1, f );
-					fclose( f );
+				FILE* f4;
+				FOpen(f4, file, "wb" );
+				if( f4 ) {
+					fwrite( map, size/8, 1, f4 );
+					fclose( f4 );
 				} else {
 					printf( "Could not open file %s for reading!\n", file );
 					err++;
@@ -2040,7 +2091,7 @@ int main( int argc, char* argv[] )
 		uint8_t* chars = (uint8_t*)malloc(256*8);
 		uint8_t* color = (uint8_t*)malloc(wc * hc);
 		const char* bgstr = GetSwitch("bg", swtc, swtn);
-		uint8_t bg = bgstr ? atoi(bgstr) : 0;
+		uint8_t bg = bgstr ? (uint8_t)atoi(bgstr) : 0;
 
 		int nunChars = 1;	// first char is empty!
 		memset(chars, 0, 8);
@@ -2080,8 +2131,8 @@ int main( int argc, char* argv[] )
 							++nunChars;
 						} else { c = 0; }
 					}
-					screen[x+y*wc] = c;
-					color[y*wc+x] = fgc;
+					screen[x+y*wc] = (uint8_t)c;
+					color[y*wc+x] = (uint8_t)fgc;
 				} else {
 					screen[x+y * wc] = 0;
 					color[x+y * wc] = 0;
@@ -2222,8 +2273,8 @@ int main( int argc, char* argv[] )
 						++nunChars;
 					} else { c = 0; }
 				}
-				screen[ x + y * wc ] = c + 64 * bgi;
-				color[ x + y * wc ] = fgc;
+				screen[ x + y * wc ] = (uint8_t)(c + 64 * bgi);
+				color[ x + y * wc ] = (uint8_t)fgc;
 			} else {
 				screen[ x + y * wc ] = 0;
 				color[ x + y * wc ] = 0;
