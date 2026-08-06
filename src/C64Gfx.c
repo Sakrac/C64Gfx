@@ -11,6 +11,7 @@
 #else
 #include <unistd.h>
 #endif
+#include "gpx_load.h"
 
 #define MAX_ARGS 32
 #define INV_255 ( 1.0f / 255.0f )
@@ -85,6 +86,54 @@ int ClosestColor(int c, uint8_t* options, int num)
 
 uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 {
+	// if file a gpx?
+	const char* ext = strrchr(file, '.');
+	if (ext && StrNCmp(ext, ".gpx", 4) == 0) {
+
+		FILE* f;
+		size_t gpxSize = 0;
+		if (!FOpen(f, file, "rb")) {
+			return NULL;
+		}
+		fseek(f, 0, SEEK_END);
+		gpxSize = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		uint8_t* gpxData = (uint8_t*)malloc(gpxSize);
+		if (!gpxData) {
+			fclose(f);
+			return NULL;
+		}
+		fread(gpxData, 1, gpxSize, f);
+		fclose(f);
+
+		uint8_t* pPixels = NULL;
+		size_t PixelsSize = 0;
+		gpx_info info = { 0 };
+		gpx_status success = parse_gpx(gpxData, gpxSize, &info, &pPixels, &PixelsSize);
+		free(gpxData);
+
+		if (success != GPX_OK) {
+			printf("Failed to parse GPX file %s: %s\n", file, gpx_status_to_string(success));
+			if (pPixels) free(pPixels);
+			return NULL;
+		}
+
+		uint8_t* pIndexedPixels = NULL;
+		size_t IndexedPixelsSize = 0;
+		gpx_status buildSuccess = gpx_generate_bitmap(pPixels, PixelsSize, &info, &pIndexedPixels, &IndexedPixelsSize);
+		free(pPixels);
+		if (buildSuccess != GPX_OK) {
+			printf("Failed to build indexed bitmap for GPX file %s: %s\n", file, gpx_status_to_string(buildSuccess));
+			if (pIndexedPixels) free(pIndexedPixels);
+			return NULL;
+		}
+
+		if (wr) { *wr = info.xsize; }
+		if (hr) { *hr = info.ysize; }
+		return pIndexedPixels;
+	}
+
+
 	int w, h, n;
 	uint8_t *raw = stbi_load( file, &w, &h, &n, 0 ), *src = raw;
 	if (!raw) { return 0; }
@@ -409,7 +458,7 @@ int MultiSprite(const char** args, int argn, char** swtc, int swtn)
 	// check for overlay sprites if specified
 	const char* ovlstr = GetSwitch("overlay", swtc, swtn);
 	if (ovlstr) {
-		uint8_t ovlc = atoi(ovlstr);
+		uint8_t ovlc = (uint8_t)atoi(ovlstr);
 		printf("Finding sprites in %s (%d, %d) with an overlay color of %d and multicolors %d and %d\n", args[1], w, h, ovlc, cols[1], cols[2]);
 		int found = 1;
 		while (found) {
@@ -529,9 +578,6 @@ int main( int argc, char* argv[] )
 		printf(
 			"gfx [-palette=<image>] -{type} <source image> [additional type params]\n"
 			"types:\n"
-			" * -spiral: generate ordered spiral fade table\n"
-			" * -fade2: generate 8-step palette fade table\n"
-			" * -fadecols: generate 16-step per-color fade table\n"
 			" * -charspr: split image into char/sprite data\n"
 			" * -columns: export custom columns (enter without params for info)\n"
 			" * -bobfont: export bob font .bin + .wid\n"
@@ -555,176 +601,6 @@ int main( int argc, char* argv[] )
 			printf("Could not open palette image \"%s\"\n", paletteFile);
 			return 1;
 		}
-	}
-
-	if( GetSwitch( "spiral", swtc, swtn ) ) {
-		float points[ NUM_SPIRAL_POINTS ][ 2 ];
-		float degrees = 720;
-		float distLength = 64.0f; // time per pixel away from closest point on curve
-		int width = 24;
-		int height = 17;
-		int length = 100;
-		const char* arg;
-		arg = GetSwitch( "degrees", swtc, swtn );
-		if( arg ) { degrees = (float)atof( arg ); }
-		arg = GetSwitch( "distLength", swtc, swtn );
-		if( arg ) { distLength = ( float )atof( arg ); }
-		arg = GetSwitch( "width", swtc, swtn );
-		if( arg ) { width = atoi( arg ); }
-		arg = GetSwitch( "height", swtc, swtn );
-		if( arg ) { height = atoi( arg ); }
-		arg = GetSwitch( "length", swtc, swtn );
-		if( arg ) { length = atoi( arg ); }
-
-		float radiusX = (float)(width * 4);
-		float radiusY = (float)(height * 4);
-		arg = GetSwitch( "radiusX", swtc, swtn );
-		if( arg ) { radiusX = ( float )atof( arg ); }
-		arg = GetSwitch( "radiusY", swtc, swtn );
-		if( arg ) { radiusY = ( float )atof( arg ); }
-		for( int p=0; p < NUM_SPIRAL_POINTS; ++p ) {
-			float t = (float)p / ( float )NUM_SPIRAL_POINTS;
-			float a = t * degrees * M_PIF / 180.0f;
-			float rx = radiusX * t;
-			float ry = radiusY * t;
-			points[p][0] = rx * cosf( a ) + radiusX;
-			points[p][1] = ry * sinf( a ) + radiusY;
-		}
-		// sorted by order...
-		struct DistIdx* order = ( struct DistIdx* )malloc( width * height * sizeof( struct DistIdx ) );
-		// find the closest time distance for each center of the grid
-		int num = 0;
-		for( int y = 0; y < height; ++y ) {
-			float posY = y*8.0f + 4.0f;
-			for( int x = 0; x < width; ++x ) {
-				float posX = x*8.0f + 4.0f;
-				float closestT = 1e36f;
-
-				for( int p=0; p < NUM_SPIRAL_POINTS; ++p ) {
-					float dx = posX - points[ p ][ 0 ];
-					float dy = posY - points[ p ][ 1 ];
-					float l = sqrtf(dx*dx + dy*dy);
-					float tSum = p * length / (float)NUM_SPIRAL_POINTS + distLength * l;
-					if( tSum < closestT ) {
-						closestT = tSum;
-					}
-				}
-				order[ num ].dist = closestT;
-				order[ num ].idx = y * 40 + x;
-				++num;
-			}
-		}
-		qsort( order, num, sizeof( struct DistIdx ), sortDistIdx );
-
-		printf( "\n; ordered:\n\tdc.w " );
-		for( int i = 0, n = width * height; i<n; ++i ) {
-			printf( "$%04x + FadeScreen", order[ i ].idx & 0xffff );
-			if( (~i)&0x7 ) { printf(", "); }
-			else { printf( "\n\tdc.w " ); }
-		}
-
-		return 0;
-	}
-
-	if( GetSwitch( "fade2", swtc, swtn ) )
-	{
-		const float graySteps[] = { 0.48f, 0.55f, 0.8f };
-		for( int s=0; s<8; ++s ) {
-			for( int c = 0; c < 16; ++c ) {
-				float r = palette[ c ][0] * INV_255;
-				float g = palette[ c ][1] * INV_255;
-				float b = palette[ c ][2] * INV_255;
-				float v = s<3 ? graySteps[s] : 1.0f;
-				float k = s>=3 ? (7-s)/(7.0f-3.0f) : 1.0f;
-
-				float m = ( ( 0.3f * r ) + ( 0.59f * g ) + ( 0.11f * b ) );
-				r = k * ( v * m + ( 1 - v ) * r );
-				g = k * ( v * m + ( 1 - v ) * g );
-				b = k * ( v * m + ( 1 - v ) * b );
-				float closest = 1e36f;
-				int col = 11;
-				for( int cc = 0; cc<16; ++cc ) {
-
-					float rd = r - palette[ cc ][ 0 ] * INV_255;
-					float gd = g - palette[ cc ][ 1 ] * INV_255;
-					float bd = b - palette[ cc ][ 2 ] * INV_255;
-					float d = rd*rd+gd*gd+bd*bd;
-					if( d < closest ) {
-						closest = d;
-						col = cc;
-					}
-				}
-				printf( "$%02x, ", col );
-			}
-			printf("\n");
-		}
-		return 0;
-	}
-
-
-	if( GetSwitch( "fadecols", swtc, swtn ) )
-	{
-		const float inv255 = 1.0f / 255.0f;
-		uint8_t fades[ 16 ][ 16 ];
-		const float hiL = 0.25f;
-		const float hiS = 0.5f;
-
-		for( int c = 0; c < 16; ++c ) {
-			struct float3 orig = { inv255 * palette[ c ][ 0 ], inv255 * palette[ c ][ 1 ], inv255 * palette[ c ][ 2 ] };
-			struct float3 hsl_orig = RGB2HSL( orig );
-			printf( "\tdc.b" );
-			for( int f = 0; f < 16; ++f ) {
-				// 0 - black, 15 = c
-				struct float3 hsl = hsl_orig;
-#if 1
-				float ff = (f + 1) / 16.0f;
-				if( ff < hiS ) { hsl.y = ff / hiS; }
-				else {
-					float fr = ff - hiS;
-					float fs = fr / (1.0f - hiS);
-					hsl.y = (1.0f - fs ) + fs * hsl.y;
-				}
-				//hsl.y *= ff;
-				hsl.x = fmodf( hsl.x + 6.0f * (1.0f - ff), 6.0f );
-				if( ff < hiL ) { hsl.z = 0.75f * ff / hiL; }
-				else { 
-					float fr = ff - hiL;
-					float fe = 1.0f - fr / (1.0f - hiL);
-					hsl.z = 0.75f * fe + ( 1.0f - fe ) * hsl.z;
-				}
-#else
-				if( f < 8 ) {
-					hsl = hsl_orig;
-					hsl.x = fmodf( hsl_orig.x + 3.0f, 6.0f );
-					hsl.y = (1.0f / 8.0f) * f;
-					hsl.z = (1.0f / 8.0f) * f;
-				} else {
-					float t = (f - 8) / 7.0f;
-					hsl.x = hsl_orig.x;
-					hsl.y = (1.0f - t) + t * hsl_orig.y;
-					hsl.z = (1.0f - t) + t * hsl_orig.z;
-				}
-#endif
-				float closest = 1e36f;
-				int b = 0;
-				struct float3 rgb = HSL2RGB( hsl );
-				for( int m = 0; m < 16; ++m ) {
-					struct float3 prgb = { inv255 * palette[ m ][ 0 ], inv255 * palette[ m ][ 1 ], inv255 * palette[ m ][ 2 ] };
-
-					float d = square(prgb.x - rgb.x) + square(prgb.y - rgb.y) + square(prgb.z - rgb.z);
-
-					if( d < closest ) {
-						closest = d;
-						b = m;
-					}
-				}
-				fades[ c ][ f ] = b;
-				if( f ) { printf( "," ); }
-				printf( " $%02x", b );
-			}
-			printf( "\n" );
-		}
-		return 0;
 	}
 
 	if( GetSwitch( "charspr", swtc, swtn ) )
@@ -765,7 +641,7 @@ int main( int argc, char* argv[] )
 						}
 					}
 				}
-				chrCol[x + y * chrWide] = bestCol;
+				chrCol[x + y * chrWide] = (uint8_t)bestCol;
 			}
 		}
 		// set up the char data
@@ -1041,7 +917,7 @@ int main( int argc, char* argv[] )
 				if( byte ) { last = y; }
 				buf[ c ][ y ] = byte;
 			}
-			widths[ c ] = last + 1;
+			widths[ c ] = (uint8_t)(last + 1);
 		}
 		FILE *f;
 		char name[ _MAX_PATH ];
@@ -1099,7 +975,7 @@ int main( int argc, char* argv[] )
 
 	if (GetSwitch("bitmap", swtc, swtn)) {
 		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>] [-png=<png>] [-dither=<1-64>]\n"); return 0; }
-		int w, h;
+		int w=1, h=1;
 		uint8_t* img = 0;
 
 		const char* ditherStr = GetSwitch("dither", swtc, swtn);
@@ -1136,13 +1012,13 @@ int main( int argc, char* argv[] )
 				for(int c=0; c<16; ++c) {
 					if(hist[c]>cnt[0]) {
 						col[1] = col[0]; cnt[1] = col[0];
-						col[0] = c; cnt[0] = hist[c];
+						col[0] = (uint8_t)c; cnt[0] = hist[c];
 					} else if(hist[c]>cnt[1]) {
-						col[1] = c; cnt[1] = hist[c];
+						col[1] = (uint8_t)c; cnt[1] = hist[c];
 					}
 				}
 				if(col[0]<col[1]) {
-					int t = col[0]; col[0] = col[1]; col[1] = t;
+					int t = col[0]; col[0] = col[1]; col[1] = (uint8_t)t;
 				}
 				screen[y * wid + x] = col[0] | (col[1] << 4);
 				for(int cy=0; cy<8; ++cy) {
@@ -1153,7 +1029,7 @@ int main( int argc, char* argv[] )
 						b = (b << 1);
 						uint8_t c = (py < h && px < w) ? (img[py * w + px] & 0xf) : col[0];
 						if (c != col[0] && c != col[1]) {
-							c = ClosestColor(c, col, 2);
+							c = (uint8_t)ClosestColor(c, col, 2);
 						}
 						if (c == col[1]) { b |= 1; }
 					}
@@ -1226,7 +1102,7 @@ int main( int argc, char* argv[] )
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
 		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>] [-koala=<koala-file>] [-png=<png-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 
-		int w, h;
+		int w = 1, h = 1;
 		uint8_t* img = 0;
 
 		const char* ditherStr = GetSwitch("dither", swtc, swtn);
@@ -1359,7 +1235,7 @@ int main( int argc, char* argv[] )
 //							uint8_t c = s[xp + yp * w];
 							b <<= 2;
 							if (c != bg) {
-								if (c != col[1] && c != col[2] && c != col[3]) { c = ClosestColor(c, col, 4); }
+								if (c != col[1] && c != col[2] && c != col[3]) { c = (uint8_t)ClosestColor(c, col, 4); }
 								if (c == col[1]) { b |= 2; } else if (c == col[2]) { b |= 1; } else if (c == col[3]) { b |= 3; }
 							}
 						}
@@ -1512,7 +1388,7 @@ int main( int argc, char* argv[] )
 						uint8_t cbi = 0xff;
 						for (int bi = 0; bi < 4; ++bi) {
 							if (c == cols[bi]) {
-								cbi = bi;
+								cbi = (uint8_t)bi;
 								break;
 							}
 						}
@@ -1712,7 +1588,7 @@ int main( int argc, char* argv[] )
 						}
 					}
 				}
-				color[ y * wc + x ] = chrCol >= 0 ? ( chrCol | 8 ) : ( prevChrCol | 8 );
+				color[ y * wc + x ] = chrCol >= 0 ? (uint8_t)( chrCol | 8 ) : (uint8_t)( prevChrCol | 8 );
 				if( chrCol > 0 ) { prevChrCol = chrCol; }
 				uint8_t chr[ 8 ] = { 0 };
 				for( int yp = 0; yp < 8; ++yp ) {
@@ -1744,7 +1620,7 @@ int main( int argc, char* argv[] )
 					}
 					else { c = 0; }
 				}
-				screen[ x + y * wc ] = c;
+				screen[ x + y * wc ] = (uint8_t)c;
 			}
 		}
 		printf( "Used chars for %s = %d\n", args[1], nunChars );
@@ -1847,16 +1723,16 @@ int main( int argc, char* argv[] )
 
 				if( args[i][0] == '*' ) { memcpy( file + strlen( args[ i ] )-1, scrExt, strlen( scrExt ) + 1 ); }
 				else { memcpy( file + strlen( args[ i ] ), iscrExt, strlen( iscrExt ) + 1 ); }
-				FILE* f;
-				FOpen(f, file, "rb" );
-				if( f ) {
-					fseek( f, 0, SEEK_END );
-					size_t sizeScrn = ftell( f );
-					fseek( f, 0, SEEK_SET );
+				FILE* f2;
+				FOpen(f2, file, "rb" );
+				if( f2 ) {
+					fseek( f2, 0, SEEK_END );
+					size_t sizeScrn = ftell( f2 );
+					fseek( f2, 0, SEEK_SET );
 					uint8_t* scrn = (uint8_t*)malloc( sizeScrn );
 					uint8_t* scrn2 = (uint8_t*)malloc( sizeScrn );
-					fread( scrn, sizeScrn, 1, f );
-					fclose( f );
+					fread( scrn, sizeScrn, 1, f2 );
+					fclose( f2 );
 
 					memset( refd, 0, sizeof( refd ) );
 
@@ -1881,7 +1757,7 @@ int main( int argc, char* argv[] )
 								chr += 8;
 							}
 							if( !found ) {
-								index = numChr;
+								index = (uint8_t)numChr;
 								if( numChr < 256 ) {
 									uint8_t *newChr = all + (numChr << 3);
 									for( int r = 0; r < 8; ++r ) {
@@ -1909,11 +1785,11 @@ int main( int argc, char* argv[] )
 						memcpy( file, args[ i ], strlen( args[ i ] ) );
 						memcpy( file + strlen( args[ i ] ), oscrExt, strlen( oscrExt ) + 1 );
 					}
-					FILE* f;
-					FOpen(f, file, "wb" );
-					if( f ) {
-						fwrite( scrn2, sizeScrn, 1, f );
-						fclose( f );
+					FILE* f3;
+					FOpen(f3, file, "wb" );
+					if( f3 ) {
+						fwrite( scrn2, sizeScrn, 1, f3 );
+						fclose( f3 );
 					}
 					else {
 						printf( "Could not open file %s for writing!\n", file );
@@ -1984,7 +1860,7 @@ int main( int argc, char* argv[] )
 						chr += 8;
 					}
 					if( !found ) {
-						map[ c ] = numChr;
+						map[ c ] = (uint8_t)numChr;
 						if( numChr < 256 ) {
 							for( int r = 0; r < 8; ++r ) {
 								all[ ( numChr<<3 ) + r ] = cmp[ r ];
@@ -1996,11 +1872,11 @@ int main( int argc, char* argv[] )
 				}
 				memcpy( file, args[ i ], strlen( args[ i ] ) );
 				memcpy( file + strlen( args[ i ] ), extChrMap, strlen( extChrMap ) + 1 );
-				FILE* f;
-				FOpen(f, file, "wb" );
-				if( f ) {
-					fwrite( map, size/8, 1, f );
-					fclose( f );
+				FILE* f4;
+				FOpen(f4, file, "wb" );
+				if( f4 ) {
+					fwrite( map, size/8, 1, f4 );
+					fclose( f4 );
 				} else {
 					printf( "Could not open file %s for reading!\n", file );
 					err++;
@@ -2040,7 +1916,7 @@ int main( int argc, char* argv[] )
 		uint8_t* chars = (uint8_t*)malloc(256*8);
 		uint8_t* color = (uint8_t*)malloc(wc * hc);
 		const char* bgstr = GetSwitch("bg", swtc, swtn);
-		uint8_t bg = bgstr ? atoi(bgstr) : 0;
+		uint8_t bg = bgstr ? (uint8_t)atoi(bgstr) : 0;
 
 		int nunChars = 1;	// first char is empty!
 		memset(chars, 0, 8);
@@ -2080,8 +1956,8 @@ int main( int argc, char* argv[] )
 							++nunChars;
 						} else { c = 0; }
 					}
-					screen[x+y*wc] = c;
-					color[y*wc+x] = fgc;
+					screen[x+y*wc] = (uint8_t)c;
+					color[y*wc+x] = (uint8_t)fgc;
 				} else {
 					screen[x+y * wc] = 0;
 					color[x+y * wc] = 0;
@@ -2222,8 +2098,8 @@ int main( int argc, char* argv[] )
 						++nunChars;
 					} else { c = 0; }
 				}
-				screen[ x + y * wc ] = c + 64 * bgi;
-				color[ x + y * wc ] = fgc;
+				screen[ x + y * wc ] = (uint8_t)(c + 64 * bgi);
+				color[ x + y * wc ] = (uint8_t)fgc;
 			} else {
 				screen[ x + y * wc ] = 0;
 				color[ x + y * wc ] = 0;

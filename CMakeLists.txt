@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(C64Gfx LANGUAGES C)
 
-add_executable(C64Gfx src/C64Gfx.c)
+add_executable(C64Gfx src/C64Gfx.c src/gpx_load.c src/gpx_load.h)
 
 target_compile_features(C64Gfx PRIVATE c_std_11)
 
