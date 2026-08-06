@@ -29,6 +29,19 @@ where {type} is one of:
  * -ebcm: extended background color mode (text)
  * \<no arg>: convert EBCM image from 4 background colors
 
+## Accepted image formats (stb_image.h & custom gpx loading)
+
+* JPEG baseline & progressive (12 bpc/arithmetic not supported, same as stock IJG lib)
+* PNG 1/2/4/8-bit-per-channel (16 bpc not supported)
+* TGA (not sure what subset, if a subset)
+* BMP non-1bpp, non-RLE
+* PSD (composited view only, no extra channels, 8/16 bit-per-channel)
+* GIF (*comp always reports as 4-channel)
+* HDR (radiance rgbE format)
+* PIC (Softimage PIC)
+* PNM (PPM and PGM binary only)
+* GPX (Pixcen)
+
 ## -columns
 
 C64Gfx -columns \<image> \<out> \<bg> count dim [-mc=col01,col10,col11] [-oc=col] [-oci=col] [-pad=x]
