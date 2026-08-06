@@ -3,14 +3,17 @@ Utility to convert image files to C64 binary files
 
 Find the current binary in [releases](https://github.com/Sakrac/C64Gfx/releases)
 
+## Updadtes
+
+* Added native GPX file format loading (native Pixcen format)
+* Switched to cmake project, can generate a visual studio project or simply build directly, see below
+* Removed some redundant outputs
+
 ## Usage
 
 C64Gfx [-palette=<image>] -{type} <source image> [additional type params]
 
 where {type} is one of:
- * -spiral: generate ordered spiral fade table
- * -fade2: generate 8-step palette fade table
- * -fadecols: generate 16-step per-color fade table
  * -charspr: split image into char/sprite data
  * -columns: export custom columns
  * -bobfont: export bob font .bin + .wid
@@ -25,7 +28,6 @@ where {type} is one of:
  * -rows: convert to 8 pixels per byte row by row
  * -ebcm: extended background color mode (text)
  * \<no arg>: convert EBCM image from 4 background colors
-
 
 ## -columns
 

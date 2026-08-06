@@ -11,8 +11,10 @@ The extracted information is stored in a gpx_info structure.
 GPX is the proprietary graphics format used by Pixcen that
 is developed by John Hammarberg: https://github.com/Hammarberg/pixcen/
 
-This implementation uses the miniz library for decompression
-please see miniz/miniz.c for license and other information.
+Pixcen downloads: https://hammarberg.github.io/pixcen/
+
+This implementation uses the miniz library for decompression,
+see miniz/miniz.c for license and other information.
 
 No part of the Pixcen source code is used in this implementation.
 
@@ -32,7 +34,7 @@ purpose. It first appeared in https://github.com/sakrac/C64Gfx
 #define MINIZ_NO_STDIO
 #include "miniz/miniz.c"
 
-static int32_t read_le32(const unsigned char *p) {
+static inline int32_t read_le32(const unsigned char *p) {
     return (int32_t)((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
 }
 
@@ -192,12 +194,24 @@ gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *inf
         }
     }
 
+    // give multicolor double width so it matches Pixcen exported png
+    switch(info->mode) {
+        case GPX_MODE_MULTICOLOR_BITMAP:
+        case GPX_MODE_MULTICOLOR_SPRITE:
+        case GPX_MODE_MULTICOLOR_CHAR:
+        case GPX_MODE_WIDE_UNRESTRICTED:
+            info->xsize *= 2;
+            break;
+        default:
+            break;
+	}
+
     if (info->mapsize <= 0 || info->backbuffers <= 0) {
         free(decompressed);
         return GPX_ERR_BAD_METADATA;
     }
 
-    info->payload_offset = (size_t)(p - decompressed);
+    info->payload_offset = (uint32_t)(p - decompressed);
 
 	if (info->payload_offset + 64 <= (size_t)decompressed_size) {
 		size_t slot_size = 64 + (size_t)info->mapsize + (size_t)info->screensize + (size_t)info->colorsize;
@@ -207,10 +221,8 @@ gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *inf
 
 		if (slot_base + 64 <= (size_t)decompressed_size) {
 			info->background_color = decompressed[slot_base + 60];
-			info->char_multicolor0 = decompressed[slot_base + 61];
-			info->char_multicolor1 = decompressed[slot_base + 62];
-			info->sprite_multicolor0 = decompressed[slot_base + 63];
-			info->sprite_multicolor1 = 0;
+			info->multicolor0 = decompressed[slot_base + 61];
+			info->multicolor1 = decompressed[slot_base + 62];
 		}
 	}
 
@@ -219,24 +231,54 @@ gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *inf
     return GPX_OK;
 }
 
-uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t *screen, uint8_t *colors, uint8_t *chars)
+uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t bg, uint8_t mc0, uint8_t mc1, const uint8_t *screen, const uint8_t *colors, const uint8_t *chars)
 {
+	uint8_t* image = (uint8_t*)malloc(w * h);
+	if (!image) {
+		return NULL;
+	}
+
+	// Unrestricted modes
+    if (mode == GPX_MODE_UNRESTRICTED)
+    {
+        memcpy(image, chars, w * h);
+        return image;
+	} else if (mode == GPX_MODE_WIDE_UNRESTRICTED) {
+        for(int i=0, n=w*h; i<n; i++) {
+            image[i] = chars[i>>1];
+		}
+    	return image;
+	}
+
+    bool mc = mode == GPX_MODE_MULTICOLOR_BITMAP || mode == GPX_MODE_MULTICOLOR_CHAR || mode == GPX_MODE_MULTICOLOR_SPRITE;
+
+	// Sprite based modes
     if (mode == GPX_MODE_SPRITE || mode == GPX_MODE_MULTICOLOR_SPRITE) {
-        // For sprite modes, we need to handle differently, but for now, let's just return NULL
-        return NULL;
+		uint8_t color_lookup[4] = { bg, mc0, 0, mc1 };
+        int span = w / 24;
+        for(int y=0; y<h; y++) {
+			int sy = y / 21;
+            for(int x=0; x<w; x++) {
+                int sx = x / 24;
+				int spr = sy * span + sx;
+				int px = x - sx * 24;
+				int py = y - sy * 21;
+                int sb = (px >> 3) + py * 3;
+
+                uint8_t b = chars[sb + (spr << 6)];
+                color_lookup[mc ? 2 : 1] = colors[spr];
+
+                if (mc) { b = ( b>> (~x & 6) ) & 3; }
+				else { b = ( b >> (~x & 7) ) & 1; }
+
+				image[y * w + x] = color_lookup[b];
+			}
+		}
+        return image;
     }
-
-	bool mc = (mode == GPX_MODE_MULTICOLOR_BITMAP || mode == GPX_MODE_MULTICOLOR_CHAR);
-
-    uint8_t* image = (uint8_t*)malloc(w * h * (mc ? 2 : 1));
-    if (!image) {
-        return NULL;
-    }
-
-    if (mc) { w <<= 1; }
 
     // character based modes
-    int cw = w>>3, ch = h>>3;
+    int cw = w>>3;
 
     for(int y=0; y<h; y++)
     {
@@ -249,14 +291,13 @@ uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t *screen, uint8_t *col
 
             uint8_t screen_value = screen[map_offs];
             uint8_t color_value = colors[map_offs];
-            uint8_t color_map[4] = {0, color_value, 1, 1 };
-            uint8_t *chardata = NULL;
+            uint8_t color_map[4] = {bg, color_value, mc0, mc1 };
+            const uint8_t *chardata = NULL;
 
             switch(mode)
             {
                 case GPX_MODE_MULTICOLOR_BITMAP:
 					chardata = chars + 8 * map_offs;
-                    color_map[0] = 9;// screen_value & 0x0f;
 					color_map[1] = screen_value >> 4;
 					color_map[2] = screen_value & 0xf;
 					color_map[3] = color_value & 0xf;
@@ -267,9 +308,12 @@ uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t *screen, uint8_t *col
                     color_map[1] = (screen_value >> 4) & 0x0f;
                     break;
                 case GPX_MODE_CHAR:
+					chardata = chars + 8 * map_offs;
+					color_map[1] = color_value & 0x0f;
+                    break;
                 case GPX_MODE_MULTICOLOR_CHAR:
-                    chardata = chars + 8 * screen_value;
-                    color_map[1] = color_value & 0x0f;
+					chardata = chars + 8 * map_offs;
+                    color_map[1] = color_value & 0xf;
                     break;
             }
             if (chardata) {
@@ -286,14 +330,11 @@ uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t *screen, uint8_t *col
     return image;
 }
 
-gpx_status gpx_build_indexed_bitmap(const unsigned char *buffer, size_t buffer_size, const gpx_info *info, unsigned char **out_buffer, size_t *out_size) {
-    size_t decoded_count;
+gpx_status gpx_generate_bitmap(const unsigned char *buffer, size_t buffer_size, const gpx_info *info, unsigned char **out_buffer, size_t *out_size) {
     size_t slot_size;
     size_t slot_index;
     size_t slot_offset;
     size_t map_offset;
-    size_t i;
-    unsigned char *bitmap;
 
     if (!buffer || !info || !out_buffer || !out_size) {
         return GPX_ERR_INVALID_INPUT;
@@ -312,11 +353,7 @@ gpx_status gpx_build_indexed_bitmap(const unsigned char *buffer, size_t buffer_s
     if (slot_index >= (size_t)info->backbuffers) {
         return GPX_ERR_BAD_METADATA;
     }
-    /* GPX payload layout:
-    - a 64-byte prefix before the first slot
-    - then one slot per backbuffer, each of size 64 + mapsize + screensize + colorsize
-    - inside each slot, the map data starts at offset 64 from the slot base
-    */
+
     slot_offset = 64 + slot_size * slot_index;
     map_offset = info->payload_offset + slot_offset + 64;
 
@@ -328,90 +365,9 @@ gpx_status gpx_build_indexed_bitmap(const unsigned char *buffer, size_t buffer_s
     const uint8_t* pColors = pChars + info->mapsize;
     const uint8_t* pScreen = pColors + info->colorsize;
 
-/*
-then the map bytes
-then the color bytes
-then the screen bytes
-*/
-#if 1
-//    uint8_t *screen_data = buffer + info->payload_offset + 64;
-//    uint8_t *colors_data = screen_data + info->screensize;
-//    uint8_t *chars_data = colors_data + info->colorsize;
-
-    bitmap = create_image((gpx_mode)info->mode, info->xsize, info->ysize, pScreen, pColors, pChars);
-	*out_buffer = bitmap;
+    *out_buffer = create_image((gpx_mode)info->mode, info->xsize, info->ysize, info->background_color, info->multicolor0, info->multicolor1, pScreen, pColors, pChars);
 	*out_size = info->xsize * info->ysize;
 	return GPX_OK;
-#else
-
-    switch (info->mode) {
-        case 0: /* bitmap */
-        case 1: /* multicolor bitmap */
-        case 8: /* unrestricted */
-        case 9: /* wide unrestricted */
-            break;
-        default:
-            return GPX_ERR_BAD_METADATA;
-    }
-
-    decoded_count = (size_t)info->xsize * (size_t)info->ysize;
-    bitmap = (unsigned char *)malloc(decoded_count);
-    if (!bitmap) {
-        return GPX_ERR_OUT_OF_MEMORY;
-    }
-
-    bool mc = (info->mode == GPX_MODE_MULTICOLOR_BITMAP || info->mode == GPX_MODE_MULTICOLOR_CHAR || info->mode == GPX_MODE_MULTICOLOR_SPRITE);
-
-
-
-    for (i = 0; i < decoded_count; ++i) {
-        size_t x = i % (size_t)info->xsize;
-        size_t y = i / (size_t)info->xsize;
-        size_t cell_x;
-        size_t cell_y;
-        size_t byte_index;
-        unsigned char map_byte;
-
-        if (mc) {
-
-
-            cell_x = x / 4;
-            cell_y = y / 8;
-			int screen_index = cell_y * (info->xsize>>2) + cell_x;
-            byte_index = cell_y * (info->xsize>>2) + cell_x * 8 + (y&7);
-            map_byte = buffer[map_offset + byte_index];
-			uint8_t screen_byte = pScreen[screen_index];
-			uint8_t color_byte = pColors[screen_index];
-            uint8_t color_index = (map_byte >> (6 - 2*(x&3))) & 3;
-            switch (color_index) {
-                case 0:
-                    bitmap[i] = 0; // Background color
-                    break;
-                case 1:
-                    bitmap[i] = screen_byte >> 4;
-                    break;
-                case 2:
-                    bitmap[i] = screen_byte & 0xf;
-                    break;
-                case 3:
-                    bitmap[i] = color_byte & 0xf;
-                    break;
-			}
-            bitmap[i] = (unsigned char)((map_byte >> (7 - (x % 8))) & 0x01);
-        } else if (info->mode != GPX_MODE_UNRESTRICTED && info->mode != GPX_MODE_WIDE_UNRESTRICTED) {
-            cell_x = x / 4;
-            cell_y = y / 8;
-            byte_index = cell_y * (size_t)info->xsize * 2 + cell_x * 8 + (y % 8);
-            map_byte = buffer[map_offset + byte_index];
-            bitmap[i] = (unsigned char)((map_byte >> (2 * (3 - (x % 4)))) & 0x03);
-        } else {
-            bitmap[i] = (unsigned char)(buffer[map_offset + y * (size_t)info->xsize + x] & 0x0F);
-        }
-    }
-	*out_buffer = bitmap;
-	*out_size = decoded_count;
-	return GPX_OK;
-#endif
 }
 
 const char *gpx_status_to_string(gpx_status status) {

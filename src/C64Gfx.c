@@ -120,7 +120,7 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 
 		uint8_t* pIndexedPixels = NULL;
 		size_t IndexedPixelsSize = 0;
-		gpx_status buildSuccess = gpx_build_indexed_bitmap(pPixels, PixelsSize, &info, &pIndexedPixels, &IndexedPixelsSize);
+		gpx_status buildSuccess = gpx_generate_bitmap(pPixels, PixelsSize, &info, &pIndexedPixels, &IndexedPixelsSize);
 		free(pPixels);
 		if (buildSuccess != GPX_OK) {
 			printf("Failed to build indexed bitmap for GPX file %s: %s\n", file, gpx_status_to_string(buildSuccess));
@@ -128,9 +128,7 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 			return NULL;
 		}
 
-		int mcs = (info.mode == GPX_MODE_MULTICOLOR_BITMAP || info.mode == GPX_MODE_MULTICOLOR_CHAR || info.mode == GPX_MODE_MULTICOLOR_SPRITE) ? 2 : 1;
-
-		if (wr) { *wr = info.xsize * mcs; }
+		if (wr) { *wr = info.xsize; }
 		if (hr) { *hr = info.ysize; }
 		return pIndexedPixels;
 	}
@@ -580,9 +578,6 @@ int main( int argc, char* argv[] )
 		printf(
 			"gfx [-palette=<image>] -{type} <source image> [additional type params]\n"
 			"types:\n"
-			" * -spiral: generate ordered spiral fade table\n"
-			" * -fade2: generate 8-step palette fade table\n"
-			" * -fadecols: generate 16-step per-color fade table\n"
 			" * -charspr: split image into char/sprite data\n"
 			" * -columns: export custom columns (enter without params for info)\n"
 			" * -bobfont: export bob font .bin + .wid\n"
@@ -606,176 +601,6 @@ int main( int argc, char* argv[] )
 			printf("Could not open palette image \"%s\"\n", paletteFile);
 			return 1;
 		}
-	}
-
-	if( GetSwitch( "spiral", swtc, swtn ) ) {
-		float points[ NUM_SPIRAL_POINTS ][ 2 ];
-		float degrees = 720;
-		float distLength = 64.0f; // time per pixel away from closest point on curve
-		int width = 24;
-		int height = 17;
-		int length = 100;
-		const char* arg;
-		arg = GetSwitch( "degrees", swtc, swtn );
-		if( arg ) { degrees = (float)atof( arg ); }
-		arg = GetSwitch( "distLength", swtc, swtn );
-		if( arg ) { distLength = ( float )atof( arg ); }
-		arg = GetSwitch( "width", swtc, swtn );
-		if( arg ) { width = atoi( arg ); }
-		arg = GetSwitch( "height", swtc, swtn );
-		if( arg ) { height = atoi( arg ); }
-		arg = GetSwitch( "length", swtc, swtn );
-		if( arg ) { length = atoi( arg ); }
-
-		float radiusX = (float)(width * 4);
-		float radiusY = (float)(height * 4);
-		arg = GetSwitch( "radiusX", swtc, swtn );
-		if( arg ) { radiusX = ( float )atof( arg ); }
-		arg = GetSwitch( "radiusY", swtc, swtn );
-		if( arg ) { radiusY = ( float )atof( arg ); }
-		for( int p=0; p < NUM_SPIRAL_POINTS; ++p ) {
-			float t = (float)p / ( float )NUM_SPIRAL_POINTS;
-			float a = t * degrees * M_PIF / 180.0f;
-			float rx = radiusX * t;
-			float ry = radiusY * t;
-			points[p][0] = rx * cosf( a ) + radiusX;
-			points[p][1] = ry * sinf( a ) + radiusY;
-		}
-		// sorted by order...
-		struct DistIdx* order = ( struct DistIdx* )malloc( width * height * sizeof( struct DistIdx ) );
-		// find the closest time distance for each center of the grid
-		int num = 0;
-		for( int y = 0; y < height; ++y ) {
-			float posY = y*8.0f + 4.0f;
-			for( int x = 0; x < width; ++x ) {
-				float posX = x*8.0f + 4.0f;
-				float closestT = 1e36f;
-
-				for( int p=0; p < NUM_SPIRAL_POINTS; ++p ) {
-					float dx = posX - points[ p ][ 0 ];
-					float dy = posY - points[ p ][ 1 ];
-					float l = sqrtf(dx*dx + dy*dy);
-					float tSum = p * length / (float)NUM_SPIRAL_POINTS + distLength * l;
-					if( tSum < closestT ) {
-						closestT = tSum;
-					}
-				}
-				order[ num ].dist = closestT;
-				order[ num ].idx = y * 40 + x;
-				++num;
-			}
-		}
-		qsort( order, num, sizeof( struct DistIdx ), sortDistIdx );
-
-		printf( "\n; ordered:\n\tdc.w " );
-		for( int i = 0, n = width * height; i<n; ++i ) {
-			printf( "$%04x + FadeScreen", order[ i ].idx & 0xffff );
-			if( (~i)&0x7 ) { printf(", "); }
-			else { printf( "\n\tdc.w " ); }
-		}
-
-		return 0;
-	}
-
-	if( GetSwitch( "fade2", swtc, swtn ) )
-	{
-		const float graySteps[] = { 0.48f, 0.55f, 0.8f };
-		for( int s=0; s<8; ++s ) {
-			for( int c = 0; c < 16; ++c ) {
-				float r = palette[ c ][0] * INV_255;
-				float g = palette[ c ][1] * INV_255;
-				float b = palette[ c ][2] * INV_255;
-				float v = s<3 ? graySteps[s] : 1.0f;
-				float k = s>=3 ? (7-s)/(7.0f-3.0f) : 1.0f;
-
-				float m = ( ( 0.3f * r ) + ( 0.59f * g ) + ( 0.11f * b ) );
-				r = k * ( v * m + ( 1 - v ) * r );
-				g = k * ( v * m + ( 1 - v ) * g );
-				b = k * ( v * m + ( 1 - v ) * b );
-				float closest = 1e36f;
-				int col = 11;
-				for( int cc = 0; cc<16; ++cc ) {
-
-					float rd = r - palette[ cc ][ 0 ] * INV_255;
-					float gd = g - palette[ cc ][ 1 ] * INV_255;
-					float bd = b - palette[ cc ][ 2 ] * INV_255;
-					float d = rd*rd+gd*gd+bd*bd;
-					if( d < closest ) {
-						closest = d;
-						col = cc;
-					}
-				}
-				printf( "$%02x, ", col );
-			}
-			printf("\n");
-		}
-		return 0;
-	}
-
-
-	if( GetSwitch( "fadecols", swtc, swtn ) )
-	{
-		const float inv255 = 1.0f / 255.0f;
-		uint8_t fades[ 16 ][ 16 ];
-		const float hiL = 0.25f;
-		const float hiS = 0.5f;
-
-		for( int c = 0; c < 16; ++c ) {
-			struct float3 orig = { inv255 * palette[ c ][ 0 ], inv255 * palette[ c ][ 1 ], inv255 * palette[ c ][ 2 ] };
-			struct float3 hsl_orig = RGB2HSL( orig );
-			printf( "\tdc.b" );
-			for( int f = 0; f < 16; ++f ) {
-				// 0 - black, 15 = c
-				struct float3 hsl = hsl_orig;
-#if 1
-				float ff = (f + 1) / 16.0f;
-				if( ff < hiS ) { hsl.y = ff / hiS; }
-				else {
-					float fr = ff - hiS;
-					float fs = fr / (1.0f - hiS);
-					hsl.y = (1.0f - fs ) + fs * hsl.y;
-				}
-				//hsl.y *= ff;
-				hsl.x = fmodf( hsl.x + 6.0f * (1.0f - ff), 6.0f );
-				if( ff < hiL ) { hsl.z = 0.75f * ff / hiL; }
-				else { 
-					float fr = ff - hiL;
-					float fe = 1.0f - fr / (1.0f - hiL);
-					hsl.z = 0.75f * fe + ( 1.0f - fe ) * hsl.z;
-				}
-#else
-				if( f < 8 ) {
-					hsl = hsl_orig;
-					hsl.x = fmodf( hsl_orig.x + 3.0f, 6.0f );
-					hsl.y = (1.0f / 8.0f) * f;
-					hsl.z = (1.0f / 8.0f) * f;
-				} else {
-					float t = (f - 8) / 7.0f;
-					hsl.x = hsl_orig.x;
-					hsl.y = (1.0f - t) + t * hsl_orig.y;
-					hsl.z = (1.0f - t) + t * hsl_orig.z;
-				}
-#endif
-				float closest = 1e36f;
-				int b = 0;
-				struct float3 rgb = HSL2RGB( hsl );
-				for( int m = 0; m < 16; ++m ) {
-					struct float3 prgb = { inv255 * palette[ m ][ 0 ], inv255 * palette[ m ][ 1 ], inv255 * palette[ m ][ 2 ] };
-
-					float d = square(prgb.x - rgb.x) + square(prgb.y - rgb.y) + square(prgb.z - rgb.z);
-
-					if( d < closest ) {
-						closest = d;
-						b = m;
-					}
-				}
-				fades[ c ][ f ] = (uint8_t)b;
-				if( f ) { printf( "," ); }
-				printf( " $%02x", b );
-			}
-			printf( "\n" );
-		}
-		return 0;
 	}
 
 	if( GetSwitch( "charspr", swtc, swtn ) )

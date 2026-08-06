@@ -29,12 +29,10 @@ typedef struct {
     int32_t backbufsel;
     int32_t par;
     int32_t overflow;
-	int32_t background_color;
-	int32_t char_multicolor0;
-	int32_t char_multicolor1;
-	int32_t sprite_multicolor0;
-	int32_t sprite_multicolor1;
-    size_t payload_offset;
+	uint8_t background_color;
+    uint8_t multicolor0;
+    uint8_t multicolor1;
+    uint32_t payload_offset;
 } gpx_info;
 
 typedef enum {
@@ -48,8 +46,13 @@ typedef enum {
     GPX_ERR_BAD_METADATA
 } gpx_status;
 
+// Read the the GPX header and metadata, decompressing the payload if necessary. Returns GPX_OK on success, or an error code on failure. The caller is responsible for freeing the out_buffer if the function returns GPX_OK.
 gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *info, unsigned char **out_buffer, size_t *out_size);
-gpx_status gpx_build_indexed_bitmap(const unsigned char *buffer, size_t buffer_size, const gpx_info *info, unsigned char **out_buffer, size_t *out_size);
+
+// Generate a bitmap from the GPX data. Returns GPX_OK on success, or an error code on failure. The caller is responsible for freeing the out_buffer if the function returns GPX_OK.
+gpx_status gpx_generate_bitmap(const unsigned char *buffer, size_t buffer_size, const gpx_info *info, unsigned char **out_buffer, size_t *out_size);
+
+// Convert a gpx_status code to a human-readable string.
 const char *gpx_status_to_string(gpx_status status);
 
 #endif
