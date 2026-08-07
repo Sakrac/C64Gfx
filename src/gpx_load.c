@@ -123,8 +123,14 @@ gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *inf
 					free(decompressed);
 					return GPX_ERR_TRUNCATED_METADATA;
 				}
-                arg = arg * 10 + (*p++ - '0');
+                arg = arg * 10 + (*p - '0');
+                p += 2;
             }
+            if (p >= (end-1)) {
+				free(decompressed);
+				return GPX_ERR_TRUNCATED_METADATA;
+            }
+            p += 2;
 
             if (strcmp(key, "xsize") == 0) {
                 info->xsize = arg;
