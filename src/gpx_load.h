@@ -29,6 +29,12 @@ typedef struct {
     int32_t backbufsel;
     int32_t par;
     int32_t overflow;
+	int32_t palette;
+	int32_t pcol;
+	int32_t pmap;
+    int32_t pscr;
+	uint8_t autoselect;
+	uint8_t cellsnap;
 	uint8_t background_color;
     uint8_t multicolor0;
     uint8_t multicolor1;

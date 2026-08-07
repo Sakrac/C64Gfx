@@ -150,6 +150,22 @@ gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *inf
                 info->par = arg;
             } else if (strcmp(key, "overflow") == 0) {
                 info->overflow = arg;
+            } else if (strcmp(key, "autoselect") == 0) {
+				info->autoselect = (uint8_t)arg;
+            } else if (strcmp(key, "cellsnap") == 0) {
+				info->cellsnap = (uint8_t)arg;
+            } else if (strcmp(key, "palette") == 0) {
+				info->palette = arg;
+            } else if (strcmp(key, "pcol") == 0) {
+				info->pcol = arg;
+            } else if (strcmp(key, "pmap") == 0) {
+                info->pmap = arg;
+            } else if (strcmp(key, "pscr") == 0) {
+                info->pscr = arg;
+#ifdef _DEBUG
+            } else {
+				printf("GPX Key: %s, Arg: %d\n", key, arg);
+#endif
             }
         }
     }
