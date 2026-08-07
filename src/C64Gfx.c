@@ -1635,7 +1635,7 @@ int main( int argc, char* argv[] )
 			memcpy( file, out, outLen );
 			memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
 			FILE* f;
-			FOpen(f, file, "rb" );
+			FOpen(f, file, "wb" );
 			if( f ) {
 				if( GetSwitch( "skip0", swtc, swtn ) ) {
 					fwrite( chars + 8, nunChars * 8 - 8, 1, f );
@@ -1807,7 +1807,7 @@ int main( int argc, char* argv[] )
 		}
 		if( !err ) {
 			FILE* f;
-			FOpen(f, file, "rb" );
+			FOpen(f, file, "wb" );
 			if( f ) {
 				fwrite( all, numChr * 8, 1, f );
 				fclose( f );
