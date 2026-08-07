@@ -106,31 +106,31 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 		fread(gpxData, 1, gpxSize, f);
 		fclose(f);
 
-		uint8_t* pPixels = NULL;
-		size_t PixelsSize = 0;
+		uint8_t* pPayload = NULL;
+		size_t PayloadSize = 0;
 		gpx_info info = { 0 };
-		gpx_status success = parse_gpx(gpxData, gpxSize, &info, &pPixels, &PixelsSize);
+		gpx_status success = parse_gpx(gpxData, gpxSize, &info, &pPayload, &PayloadSize);
 		free(gpxData);
 
 		if (success != GPX_OK) {
 			printf("Failed to parse GPX file %s: %s\n", file, gpx_status_to_string(success));
-			if (pPixels) free(pPixels);
+			if (pPayload) free(pPayload);
 			return NULL;
 		}
 
-		uint8_t* pIndexedPixels = NULL;
-		size_t IndexedPixelsSize = 0;
-		gpx_status buildSuccess = gpx_generate_bitmap(pPixels, PixelsSize, &info, &pIndexedPixels, &IndexedPixelsSize);
-		free(pPixels);
+		uint8_t* pImg = NULL;
+		size_t ImgSize = 0;
+		gpx_status buildSuccess = gpx_generate_bitmap(pPayload, PayloadSize, &info, &pImg, &ImgSize);
+		free(pPayload);
 		if (buildSuccess != GPX_OK) {
 			printf("Failed to build indexed bitmap for GPX file %s: %s\n", file, gpx_status_to_string(buildSuccess));
-			if (pIndexedPixels) free(pIndexedPixels);
+			if (pImg) free(pImg);
 			return NULL;
 		}
 
 		if (wr) { *wr = info.xsize; }
 		if (hr) { *hr = info.ysize; }
-		return pIndexedPixels;
+		return pImg;
 	}
 
 

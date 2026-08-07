@@ -38,58 +38,6 @@ static inline int32_t read_le32(const unsigned char *p) {
     return (int32_t)((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
 }
 
-static int copy_ascii_string(const unsigned char **p, const unsigned char *end, char *buf, size_t buf_size) {
-    size_t i = 0;
-
-    while (*p < end && **p != '\0') {
-        if (i + 1 < buf_size) {
-            buf[i++] = (char)**p;
-        }
-        ++(*p);
-    }
-
-    if (*p >= end) {
-        return 0;
-    }
-
-    if (i + 1 < buf_size) {
-        buf[i] = '\0';
-    }
-    ++(*p);
-    return 1;
-}
-
-static int32_t read_utf16_int(const unsigned char **p, const unsigned char *end) {
-    const unsigned char *u = *p;
-    int32_t value = 0;
-    int sign = 1;
-
-    while (u + 1 < end) {
-        uint16_t c = (uint16_t)(u[0] | ((uint16_t)u[1] << 8));
-        if (c == 0) {
-            break;
-        }
-        if (c == '-') {
-            sign = -1;
-        } else if (c >= '0' && c <= '9') {
-            value = value * 10 + (c - '0');
-        } else {
-            break;
-        }
-        u += 2;
-    }
-
-    if (u + 1 <= end) {
-        uint16_t c = (uint16_t)(u[0] | ((uint16_t)u[1] << 8));
-        if (c == 0) {
-            u += 2;
-        }
-    }
-
-    *p = u;
-    return sign * value;
-}
-
 gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *info, unsigned char **out_buffer, size_t *out_size) {
     const unsigned char *p;
     const unsigned char *end;
@@ -157,39 +105,45 @@ gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *inf
         p += 4;
 
         for (i = 0; i < metacount; ++i) {
-            char key[64];
             if (p >= end) {
                 free(decompressed);
                 return GPX_ERR_TRUNCATED_METADATA;
             }
-            if (!copy_ascii_string(&p, end, key, sizeof(key))) {
-                free(decompressed);
-                return GPX_ERR_TRUNCATED_METADATA;
+            const char* key = (const char*)p;
+            while (p < end && *p) { p++; }
+            if(p==end) {
+				free(decompressed);
+				return GPX_ERR_TRUNCATED_METADATA;
             }
-            if (p + 1 > end) {
-                free(decompressed);
-                return GPX_ERR_TRUNCATED_METADATA;
+            p++; // skip 0
+
+            int32_t arg = 0;
+            while(p<end && *p) {
+				if (*p < '0' || *p>'9') {
+					free(decompressed);
+					return GPX_ERR_TRUNCATED_METADATA;
+				}
+                arg = arg * 10 + (*p++ - '0');
             }
+
             if (strcmp(key, "xsize") == 0) {
-                info->xsize = read_utf16_int(&p, end);
+                info->xsize = arg;
             } else if (strcmp(key, "ysize") == 0) {
-                info->ysize = read_utf16_int(&p, end);
+                info->ysize = arg;
             } else if (strcmp(key, "mapsize") == 0) {
-                info->mapsize = read_utf16_int(&p, end);
+                info->mapsize = arg;
             } else if (strcmp(key, "colorsize") == 0) {
-                info->colorsize = read_utf16_int(&p, end);
+                info->colorsize = arg;
             } else if (strcmp(key, "screensize") == 0) {
-                info->screensize = read_utf16_int(&p, end);
+                info->screensize = arg;
             } else if (strcmp(key, "backbuffers") == 0) {
-                info->backbuffers = read_utf16_int(&p, end);
+                info->backbuffers = arg;
             } else if (strcmp(key, "backbufsel") == 0) {
-                info->backbufsel = read_utf16_int(&p, end);
+                info->backbufsel = arg;
             } else if (strcmp(key, "par") == 0) {
-                info->par = read_utf16_int(&p, end);
+                info->par = arg;
             } else if (strcmp(key, "overflow") == 0) {
-                info->overflow = read_utf16_int(&p, end);
-            } else {
-                read_utf16_int(&p, end);
+                info->overflow = arg;
             }
         }
     }
@@ -255,75 +209,67 @@ uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t bg, uint8_t mc0, uint
 	// Sprite based modes
     if (mode == GPX_MODE_SPRITE || mode == GPX_MODE_MULTICOLOR_SPRITE) {
 		uint8_t color_lookup[4] = { bg, mc0, 0, mc1 };
-        int span = w / 24;
-        for(int y=0; y<h; y++) {
-			int sy = y / 21;
-            for(int x=0; x<w; x++) {
-                int sx = x / 24;
-				int spr = sy * span + sx;
-				int px = x - sx * 24;
-				int py = y - sy * 21;
-                int sb = (px >> 3) + py * 3;
-
-                uint8_t b = chars[sb + (spr << 6)];
-                color_lookup[mc ? 2 : 1] = colors[spr];
-
-                if (mc) { b = ( b>> (~x & 6) ) & 3; }
-				else { b = ( b >> (~x & 7) ) & 1; }
-
-				image[y * w + x] = color_lookup[b];
-			}
+        int sw = w / 24;
+        for (int sy = 0, sh = h / 21; sy < sh; sy++) {
+            for (int sx = 0; sx < sw; sx++) {
+				color_lookup[mc ? 2 : 1] = *colors++;
+                for (int y = 0; y < 21; y++) {
+                    for (int xb = 0; xb < 3; xb++) {
+                        uint8_t b = *chars++;
+                        for (int x = 0; x < 8; x++) {
+                            uint8_t color_index = mc ?
+                                ((b >> (~x & 6)) & 3) :
+                                ((b >> (~x & 7)) & 1);
+							image[(sy * 21 + y) * w + (sx * 24 + xb * 8 + x)] = color_lookup[color_index];
+                        }
+                    }
+                }
+				chars++; // 1 extra byte per sprite
+            }
 		}
         return image;
     }
 
     // character based modes
     int cw = w>>3;
+    for (int cy = 0, ch = h>>3; cy < ch; cy++) {
+        for (int cx = 0; cx < cw; cx++) {
+            const uint8_t screen_value = *screen++;
+            const uint8_t color_value = *colors++;
+            const uint8_t* chardata = chars;
+            chars += 8;
 
-    for(int y=0; y<h; y++)
-    {
-        for(int x=0; x<w; x++)
-        {
-            int index = y * w + x;
-            uint8_t pixel_value = 0;
-            int cx = x>>3, cy = y>>3;
-            int map_offs = cx + cy * cw;
-
-            uint8_t screen_value = screen[map_offs];
-            uint8_t color_value = colors[map_offs];
-            uint8_t color_map[4] = {bg, color_value, mc0, mc1 };
-            const uint8_t *chardata = NULL;
-
-            switch(mode)
-            {
+            uint8_t color_map[4] = { bg, color_value, mc0, mc1 };
+            switch (mode) {
                 case GPX_MODE_MULTICOLOR_BITMAP:
-					chardata = chars + 8 * map_offs;
-					color_map[1] = screen_value >> 4;
-					color_map[2] = screen_value & 0xf;
-					color_map[3] = color_value & 0xf;
-					break;
+                    color_map[1] = screen_value >> 4;
+                    color_map[2] = screen_value & 0xf;
+                    color_map[3] = color_value & 0xf;
+                    break;
                 case GPX_MODE_BITMAP:
-                    chardata = chars + 8 * map_offs;
                     color_map[0] = screen_value & 0x0f;
                     color_map[1] = (screen_value >> 4) & 0x0f;
                     break;
                 case GPX_MODE_CHAR:
-					chardata = chars + 8 * map_offs;
-					color_map[1] = color_value & 0x0f;
+                    color_map[1] = color_value & 0x0f;
                     break;
                 case GPX_MODE_MULTICOLOR_CHAR:
-					chardata = chars + 8 * map_offs;
                     color_map[1] = color_value & 0xf;
                     break;
+                default:
+                    break;
             }
-            if (chardata) {
-                uint8_t b = chardata[y&7];
-                if (mc) {
-                    pixel_value = color_map[(b >> ((~x)&6)) & 3];
-                } else {
-                    pixel_value = color_map[(b >> ((~x)&7)) & 1];
+            for (int y = 0; y < 8; y++) {
+                int index = (cy * 8 + y) * w + (cx * 8);
+                for (int x = 0; x < 8; x++) {
+                    uint8_t b = chardata[y];
+                    if (mc) {
+                        image[index] = color_map[(b >> ((~x) & 6)) & 3];
+                    } else {
+                        image[index] = color_map[(b >> ((~x) & 7)) & 1];
+                    }
+                    ++index;
                 }
-                image[index] = pixel_value;
             }
         }
     }
