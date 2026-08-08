@@ -3,7 +3,7 @@ Utility to convert image files to C64 binary files
 
 Find the current binary in [releases](https://github.com/Sakrac/C64Gfx/releases)
 
-## Updadtes
+## Updates
 
 * Added native GPX file format loading (native Pixcen format)
 * Switched to cmake project, can generate a visual studio project or simply build directly, see below
