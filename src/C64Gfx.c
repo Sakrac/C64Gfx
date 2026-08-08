@@ -577,7 +577,7 @@ int main( int argc, char* argv[] )
 	if (swtn < 1) {
 		printf(
 			"gfx [-palette=<image>] -{type} <source image> [additional type params]\n"
-			"types:\n"
+			"types (output formats):\n"
 			" * -charspr: split image into char/sprite data\n"
 			" * -columns: export custom columns (enter without params for info)\n"
 			" * -bobfont: export bob font .bin + .wid\n"
@@ -591,7 +591,20 @@ int main( int argc, char* argv[] )
 			" * -texthires: hires text picture (enter without params for info)\n"
 			" * -rows: convert to 8 pixels per byte row by row\n"
 			" * -ebcm: extended background color mode (text)\n"
-			" * <no arg>: convert EBCM image from 4 background colors\n");
+			" * <no arg>: convert EBCM image from 4 background colors\n"
+			"--- input formats ---\n"
+			" * JPEG baseline & progressive (12 bpc/arithmetic not supported, same as stock IJG lib)\n"
+			" * PNG 1/2/4/8-bit-per-channel (16 bpc not supported)\n"
+			" * TGA (not sure what subset, if a subset)\n"
+			" * BMP non-1bpp, non-RLE\n"
+			" * PSD (composited view only, no extra channels, 8/16 bit-per-channel)\n"
+			" * GIF (*comp always reports as 4-channel)\n"
+			" * HDR (radiance rgbE format)\n"
+			" * PIC (Softimage PIC)\n"
+			" * PNM (PPM and PGM binary only)\n"
+			" * GPX (Pixcen)\n"
+		);
+
 		return 0;
 	}
 

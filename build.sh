@@ -1,1 +1,1 @@
-gcc src/C64Gfx.c -lm -o C64Gfx
+gcc src/C64Gfx.c src/gpx_load.c -lm -o C64Gfx

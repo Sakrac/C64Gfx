@@ -20,6 +20,7 @@ No part of the Pixcen source code is used in this implementation.
 
 This implementation is free to copy, use and modify for any
 purpose. It first appeared in https://github.com/sakrac/C64Gfx
+(by Carl-Henrik Skårman and is released under the MIT license.)
 
 */
 
