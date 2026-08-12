@@ -277,7 +277,9 @@ uint8_t* create_image(gpx_mode mode, int w, int h, uint8_t bg, uint8_t mc0, uint
                     color_map[1] = color_value & 0x0f;
                     break;
                 case GPX_MODE_MULTICOLOR_CHAR:
-                    color_map[1] = color_value & 0xf;
+                    color_map[1] = mc0;
+                    color_map[2] = mc1;
+                    color_map[3] = color_value & 0xf;
                     break;
                 default:
                     break;
