@@ -52,11 +52,26 @@ typedef enum {
     GPX_ERR_BAD_METADATA
 } gpx_status;
 
+typedef struct GpxData {
+    const uint8_t *pChars;
+    const uint8_t *pColors;
+    const uint8_t *pScreen;
+    int16_t width;
+    int16_t height;
+    gpx_mode mode;
+    uint8_t background_color;
+    uint8_t multicolor0;
+    uint8_t multicolor1;
+} GpxData;
+
 // Read the the GPX header and metadata, decompressing the payload if necessary. Returns GPX_OK on success, or an error code on failure. The caller is responsible for freeing the out_buffer if the function returns GPX_OK.
 gpx_status parse_gpx(const unsigned char *in_data, size_t in_size, gpx_info *info, unsigned char **out_buffer, size_t *out_size);
 
 // Generate a bitmap from the GPX data. Returns GPX_OK on success, or an error code on failure. The caller is responsible for freeing the out_buffer if the function returns GPX_OK.
 gpx_status gpx_generate_bitmap(const unsigned char *buffer, size_t buffer_size, const gpx_info *info, unsigned char **out_buffer, size_t *out_size);
+
+// Create a Pixcen-compatible GPX file in memory
+uint8_t* gpx_create(const GpxData *data, const gpx_info *info, size_t *out_size);
 
 // Convert a gpx_status code to a human-readable string.
 const char *gpx_status_to_string(gpx_status status);
