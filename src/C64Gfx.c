@@ -319,6 +319,32 @@ char* GetSwitch( const char* match, char** swtc, int swtn )
 	return 0;
 }
 
+uint8_t* LoadPictureWithDitherOption(const char* file, int* wr, int* hr, char** swtc, int swtn)
+{
+	uint8_t* img = 0;
+	const char* dither = GetSwitch("dither", swtc, swtn);
+	if (dither && dither[0]) {
+		int amount = atoi(dither);
+		if (amount >= 1 && amount <= 64) {
+			img = LoadPictureDither(file, wr, hr, 2, amount);
+		}
+	}
+	if (!img) { img = LoadPicture(file, wr, hr); }
+	return img;
+}
+
+int FindOrAddCharacter(uint8_t* chars, int* numChars, int maxChars, const uint8_t* candidate)
+{
+	int index = 0;
+	for (; index < *numChars; ++index) {
+		if (memcmp(chars + index * 8, candidate, 8) == 0) { return index; }
+	}
+	if (index >= maxChars) { return 0; }
+	memcpy(chars + index * 8, candidate, 8);
+	++*numChars;
+	return index;
+}
+
 float square( float x ) { return x * x; }
 
 struct DistIdx {
@@ -544,6 +570,66 @@ int LoadPalette(const char* paletteFilename)
 		return 1;
 	}
 	return 0;
+}
+
+int WriteBinaryFile(const char* filename, const void* data, size_t size)
+{
+	FILE* f;
+	if (!FOpen(f, filename, "wb")) { return 0; }
+	fwrite(data, size, 1, f);
+	fclose(f);
+	return 1;
+}
+
+int WriteBinaryFileWithExtension(const char* base, const char* extension, const void* data, size_t size)
+{
+	char filename[_MAX_PATH];
+	size_t baseLen = strlen(base);
+	size_t extensionLen = strlen(extension);
+	if (baseLen + extensionLen + 1 > sizeof(filename)) { return 0; }
+	memcpy(filename, base, baseLen);
+	memcpy(filename + baseLen, extension, extensionLen + 1);
+	return WriteBinaryFile(filename, data, size);
+}
+
+void WriteCharScreenFiles(const char* out, const void* chars, size_t charSize, const void* screen, size_t screenSize)
+{
+	WriteBinaryFileWithExtension(out, ".chr", chars, charSize);
+	WriteBinaryFileWithExtension(out, ".scr", screen, screenSize);
+}
+
+void WriteColorFile(const char* out, uint8_t* colors, size_t colorCount, int repeat, int raw)
+{
+	if (raw) {
+		WriteBinaryFileWithExtension(out, ".col", colors, colorCount * (size_t)repeat);
+		return;
+	}
+	for (size_t i = 0; i < colorCount; i += 2) {
+		colors[i / 2] = (colors[i] & 0xf) | (colors[i + 1] << 4);
+	}
+	WriteBinaryFileWithExtension(out, ".col", colors, (colorCount / 2) * (size_t)repeat);
+}
+
+void WriteCharScreenColorFiles(const char* out, uint8_t* chars, size_t charSize, int skipFirstChar,
+	const void* screen, size_t screenSize, uint8_t* colors, size_t colorCount, int repeat, int rawColor)
+{
+	if (skipFirstChar) {
+		WriteBinaryFileWithExtension(out, ".chr", chars + 8, charSize - 8);
+	} else {
+		WriteBinaryFileWithExtension(out, ".chr", chars, charSize);
+	}
+	WriteBinaryFileWithExtension(out, ".scr", screen, screenSize);
+	WriteColorFile(out, colors, colorCount, repeat, rawColor);
+}
+
+int WriteGpxFile(const char* filename, const gpx_data* data)
+{
+	size_t fileSize = 0;
+	uint8_t* file = gpx_create(data, &fileSize);
+	if (!file) { return 0; }
+	int success = WriteBinaryFile(filename, file, fileSize);
+	free(file);
+	return success;
 }
 
 int main( int argc, char* argv[] )
@@ -986,16 +1072,7 @@ int main( int argc, char* argv[] )
 	if (GetSwitch("bitmap", swtc, swtn)) {
 		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>] [-png=<png>] [-gpx=<gpx>] [-dither=<1-64>]\n"); return 0; }
 		int w=1, h=1;
-		uint8_t* img = 0;
-
-		const char* ditherStr = GetSwitch("dither", swtc, swtn);
-		if (ditherStr && ditherStr[0]) {
-			int amount = atoi(ditherStr);
-			if (amount >= 1 && amount <= 64) {
-				img = LoadPictureDither(args[1], &w, &h, 2, amount);
-			}
-		}
-		if (!img) { img = LoadPicture(args[1], &w, &h); }
+		uint8_t* img = LoadPictureWithDitherOption(args[1], &w, &h, swtc, swtn);
 		if (!img) {
 			printf("Error: Could not open image \"%s\"\n", args[1]);
 			return 1;
@@ -1049,26 +1126,7 @@ int main( int argc, char* argv[] )
 		}
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out) {
-			size_t outLen = strlen(out);
-			char file[_MAX_PATH];
-			const char* extChr = ".chr";
-			const char* extScr = ".scr";
-			memcpy(file, out, outLen);
-			memcpy(file + outLen, extChr, strlen(extChr) + 1);
-			FILE* f;
-			FOpen(f, file, "wb");
-			if (f) {
-				fwrite(bitmap, wid * hgt * 8, 1, f);
-				fclose(f);
-			}
-
-			memcpy(file, out, outLen);
-			memcpy(file + outLen, extScr, strlen(extScr) + 1);
-			FOpen(f, file, "wb");
-			if (f) {
-				fwrite(screen, wid * hgt, 1, f);
-				fclose(f);
-			}
+			WriteCharScreenFiles(out, bitmap, wid * hgt * 8, screen, wid * hgt);
 		}
 		const char* gpx = GetSwitch("gpx", swtc, swtn);
 		if (gpx) {
@@ -1080,17 +1138,7 @@ int main( int argc, char* argv[] )
 				.height = (int16_t)hgt*8,
 				.mode = GPX_MODE_BITMAP,
 			};
-			size_t gpx_file_size = 0;
-			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
-			if (gpx_file) {
-				FILE* f;
-				FOpen(f, gpx, "wb");
-				if (f) {
-					fwrite(gpx_file, gpx_file_size, 1, f);
-					fclose(f);
-				}
-				free(gpx_file);
-			}
+			WriteGpxFile(gpx, &data);
 		}
 		const char* png = GetSwitch("png", swtc, swtn);
 		if(png) {
@@ -1135,16 +1183,7 @@ int main( int argc, char* argv[] )
 		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>] [-koala=<koala-file>] [-png=<png-file>] [gpx=<gpx-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 
 		int w = 1, h = 1;
-		uint8_t* img = 0;
-
-		const char* ditherStr = GetSwitch("dither", swtc, swtn);
-		if (ditherStr && ditherStr[0]) {
-			int amount = atoi(ditherStr);
-			if (amount >= 1 && amount <= 64) {
-				img = LoadPictureDither(args[1], &w, &h, 2, amount);
-			}
-		}
-		if (!img) { img = LoadPicture(args[1], &w, &h); }
+		uint8_t* img = LoadPictureWithDitherOption(args[1], &w, &h, swtc, swtn);
 		if (!img) {
 			printf("Error: Could not open image \"%s\"\n", args[1]);
 			return 1;
@@ -1304,18 +1343,7 @@ int main( int argc, char* argv[] )
 				.mode = GPX_MODE_MULTICOLOR_BITMAP,
 				.background_color = bg
 			};
-
-			size_t gpx_file_size = 0;
-			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
-			if (gpx_file) {
-				FILE* f;
-				FOpen(f, gpx, "wb");
-				if (f) {
-					fwrite(gpx_file, gpx_file_size, 1, f);
-					fclose(f);
-				}
-				free(gpx_file);
-			}
+			WriteGpxFile(gpx, &data);
 		}
 
 		if (save_as_png) {
@@ -1356,44 +1384,9 @@ int main( int argc, char* argv[] )
 				fclose(f);
 			}
 		} else if (out) {
-			size_t outLen = strlen(out);
-			char file[_MAX_PATH];
-			const char* extChr = ".chr";
-			const char* extScr = ".scr";
-			const char* extCol = ".col";
-			memcpy(file, out, outLen);
-			memcpy(file + outLen, extChr, strlen(extChr) + 1);
-			FILE* f;
-			FOpen(f, file, "wb");
-			if (f) {
-				fwrite(bitnap, wc * hc * 8 * repeat, 1, f);
-				fclose(f);
-			}
-
-			memcpy(file, out, outLen);
-			memcpy(file + outLen, extScr, strlen(extScr) + 1);
-			FOpen(f, file, "wb");
-			if (f) {
-				fwrite(screen, wc * hc * repeat, 1, f);
-				fclose(f);
-			}
-
-			memcpy(file, out, outLen);
-			memcpy(file + outLen, extCol, strlen(extCol) + 1);
-			FOpen(f, file, "wb");
-			if (f) {
-				if (!GetSwitch("rawcol", swtc, swtn)) {
-					uint8_t* colSrc = color;
-					uint8_t* colDst = color;
-					for (int b = 0; b < (wc * hc); b += 2) {
-						*colDst++ = (colSrc[b] & 0xf) | (colSrc[b + 1] << 4);
-					}
-					fwrite(color, (wc * hc / 2) * repeat, 1, f);
-				} else {
-					fwrite(color, wc * hc * repeat, 1, f);
-				}
-				fclose(f);
-			}
+			WriteCharScreenColorFiles(out, bitnap, wc * hc * 8 * repeat, 0,
+				screen, wc * hc * repeat, color, wc * hc, repeat,
+				GetSwitch("rawcol", swtc, swtn) != 0);
 		}
 
 		free(color);
@@ -1658,24 +1651,7 @@ int main( int argc, char* argv[] )
 					}
 					chr[ yp ] = b;
 				}
-				int c = 0;
-				for( ; c < nunChars; ++c ) {
-					int same = 1;
-					for( int b = 0; b<8; ++b ) {
-						if( chars[ c * 8 + b ] != chr[ b ] ) {
-							same = 0;
-							break;
-						}
-					}
-					if( same ) { break; }
-				}
-				if( c == nunChars ) {
-					if( nunChars < 256 ) {
-						for( int b = 0; b<8; ++b ) { chars[ c * 8 + b ] = chr[ b ]; }
-						++nunChars;
-					}
-					else { c = 0; }
-				}
+				int c = FindOrAddCharacter(chars, &nunChars, 256, chr);
 				screen[ x + y * wc ] = (uint8_t)c;
 			}
 		}
@@ -1694,65 +1670,14 @@ int main( int argc, char* argv[] )
 				.multicolor0 = cols[1],
 				.multicolor1 = cols[2]
 			};
-			size_t gpx_file_size = 0;
-			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
-			if (gpx_file) {
-				FILE* f;
-				FOpen(f, gpx, "wb");
-				if (f) {
-					fwrite(gpx_file, gpx_file_size, 1, f);
-					fclose(f);
-				}
-				free(gpx_file);
-			}
+			WriteGpxFile(gpx, &data);
 		}
 		const char* out = GetSwitch( "out", swtc, swtn );
 		if( out ) {
-			size_t outLen = strlen( out );
-			char file[ _MAX_PATH ];
-			const char* extChr = ".chr";
-			const char* extScr = ".scr";
-			const char* extCol = ".col";
-			memcpy( file, out, outLen );
-			memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
-			FILE* f;
-			FOpen(f, file, "wb" );
-			if( f ) {
-				if( GetSwitch( "skip0", swtc, swtn ) ) {
-					fwrite( chars + 8, nunChars * 8 - 8, 1, f );
-				}
-				else {
-					fwrite( chars, nunChars * 8, 1, f );
-				}
-				fclose( f );
-			}
-
-			memcpy( file, out, outLen );
-			memcpy( file + outLen, extScr, strlen( extScr ) + 1 );
-			FOpen(f, file, "wb" );
-			if( f ) {
-				fwrite( screen, wc*hc, 1, f );
-				fclose( f );
-			}
-
-			memcpy( file, out, outLen );
-			memcpy( file + outLen, extCol, strlen( extCol ) + 1 );
-			FOpen(f, file, "wb" );
-			if( f ) {
-				if( !GetSwitch( "rawcol", swtc, swtn ) )
-				{
-					uint8_t* colSrc = color;
-					uint8_t* colDst = color;
-					for( int b = 0; b < (wc*hc); b += 2 ) {
-						*colDst++ = (colSrc[ b ] & 0xf) | (colSrc[ b + 1 ] << 4);
-					}
-					fwrite( color, wc*hc / 2, 1, f );
-				}
-				else {
-					fwrite( color, wc*hc, 1, f );
-				}
-				fclose( f );
-			}
+			WriteCharScreenColorFiles(out, chars, nunChars * 8,
+				GetSwitch("skip0", swtc, swtn) != 0,
+				screen, wc * hc, color, wc * hc, 1,
+				GetSwitch("rawcol", swtc, swtn) != 0);
 		}
 
 		free( color );
@@ -2059,62 +1984,14 @@ int main( int argc, char* argv[] )
 				.mode = GPX_MODE_CHAR,
 				.background_color = bg
 			};
-			size_t gpx_file_size = 0;
-			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
-			if (gpx_file) {
-				FILE* f;
-				FOpen(f, gpx, "wb");
-				if (f) {
-					fwrite(gpx_file, gpx_file_size, 1, f);
-					fclose(f);
-				}
-				free(gpx_file);
-			}
+			WriteGpxFile(gpx, &data);
 		}
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out) {
-			size_t outLen = strlen(out);
-			char file[_MAX_PATH];
-			const char* extChr = ".chr";
-			const char* extScr = ".scr";
-			const char* extCol = ".col";
-			memcpy(file, out, outLen);
-			memcpy(file+outLen, extChr, strlen(extChr)+1);
-			FILE* f;
-			FOpen(f, file, "wb" );
-			if (f) {
-				if (GetSwitch("skip0", swtc, swtn)) {
-					fwrite(chars+8, nunChars*8-8, 1, f);
-				} else {
-					fwrite(chars, nunChars*8, 1, f);
-				}
-				fclose(f);
-			}
-
-			memcpy(file, out, outLen);
-			memcpy(file+outLen, extScr, strlen(extScr)+1);
-			FOpen(f, file, "wb" );
-			if (f) {
-				fwrite(screen, wc*hc, 1, f);
-				fclose(f);
-			}
-
-			memcpy(file, out, outLen);
-			memcpy(file+outLen, extCol, strlen(extCol)+1);
-			FOpen(f, file, "wb" );
-			if (f) {
-				if (!GetSwitch("rawcol", swtc, swtn)) {
-					uint8_t* colSrc = color;
-					uint8_t* colDst = color;
-					for (int b = 0; b < (wc*hc); b += 2) {
-						*colDst++ = (colSrc[b]&0xf)|(colSrc[b+1]<<4);
-					}
-					fwrite(color, wc*hc/2, 1, f);
-				} else {
-					fwrite(color, wc*hc, 1, f);
-				}
-				fclose(f);
-			}
+			WriteCharScreenColorFiles(out, chars, nunChars * 8,
+				GetSwitch("skip0", swtc, swtn) != 0,
+				screen, wc * hc, color, wc * hc, 1,
+				GetSwitch("rawcol", swtc, swtn) != 0);
 		}
 
 		free(color);
@@ -2185,23 +2062,7 @@ int main( int argc, char* argv[] )
 						}
 					}
 				}
-				int c = 0;
-				for( ; c < nunChars; ++c ) {
-					int same = 1;
-					for( int b=0; b<8; ++b ) {
-						if( chars[ c * 8 + b ] != chr[ b ] ) {
-							same = 0;
-							break;
-						}
-					}
-					if( same ) { break; }
-				}
-				if( c == nunChars ) {
-					if( nunChars < 256 ) {
-						for( int b=0; b<8; ++b ) { chars[c*8+b] = chr[b]; }
-						++nunChars;
-					} else { c = 0; }
-				}
+				int c = FindOrAddCharacter(chars, &nunChars, 256, chr);
 				screen[ x + y * wc ] = (uint8_t)(c + 64 * bgi);
 				color[ x + y * wc ] = (uint8_t)fgc;
 			} else {
@@ -2217,49 +2078,10 @@ int main( int argc, char* argv[] )
 		//		char* GetSwitch( const char* match, char** swtc, int swtn )
 		const char* out = GetSwitch( "out", swtc, swtn );
 		if( out ) {
-			size_t outLen = strlen( out );
-			char file[ _MAX_PATH ];
-			const char* extChr = ".chr";
-			const char* extScr = ".scr";
-			const char* extCol = ".col";
-			memcpy( file, out, outLen );
-			memcpy( file + outLen, extChr, strlen( extChr ) + 1 );
-			FILE* f;
-			FOpen(f, file, "wb" );
-			if( f ) {
-				if( GetSwitch( "skip0", swtc, swtn ) ) {
-					fwrite( chars + 8, nunChars * 8 - 8, 1, f );
-				} else {
-					fwrite( chars, nunChars * 8, 1, f );
-				}
-				fclose( f );
-			}
-
-			memcpy( file, out, outLen );
-			memcpy( file + outLen, extScr, strlen( extScr ) + 1 );
-			FOpen(f, file, "wb" );
-			if( f ) {
-				fwrite( screen, wc*hc, 1, f );
-				fclose( f );
-			}
-
-			memcpy( file, out, outLen );
-			memcpy( file + outLen, extCol, strlen( extCol ) + 1 );
-			FOpen(f, file, "wb" );
-			if( f ) {
-				if( !GetSwitch( "rawcol", swtc, swtn ) )
-				{
-					uint8_t* colSrc = color;
-					uint8_t* colDst = color;
-					for( int b = 0; b < (wc*hc); b += 2 ) {
-						*colDst++ = (colSrc[ b ] & 0xf) | (colSrc[ b + 1 ] << 4);
-					}
-					fwrite( color, wc*hc / 2, 1, f );
-				} else {
-					fwrite( color, wc*hc, 1, f );
-				}
-				fclose( f );
-			}
+			WriteCharScreenColorFiles(out, chars, nunChars * 8,
+				GetSwitch("skip0", swtc, swtn) != 0,
+				screen, wc * hc, color, wc * hc, 1,
+				GetSwitch("rawcol", swtc, swtn) != 0);
 		}
 	}
 
