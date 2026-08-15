@@ -41,18 +41,6 @@ purpose. It first appeared in https://github.com/sakrac/C64Gfx
 // header + 128 bytes of metadata
 #define GPX_MAX_HEADER_SIZE 1024
 
-static const char* gpx_metadata_keys[] = {
-	"xsize",
-	"ysize",
-	"mapsize",
-	"colorsize",
-	"screensize",
-	"backbuffers",
-	"backbufsel",
-	"par",
-	"overflow"
-};
-
 bool gpx_is_multicolor(gpx_mode mode) {
 	return 	mode == GPX_MODE_MULTICOLOR_BITMAP || mode == GPX_MODE_MULTICOLOR_CHAR || mode == GPX_MODE_MULTICOLOR_SPRITE;
 }
@@ -152,7 +140,7 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 			break;
 	}
 
-	size_t total_size = GPX_MAX_HEADER_SIZE + chrSize + colSize + scrSize;
+	size_t total_size = GPX_MAX_HEADER_SIZE + 64 + 64 + chrSize + colSize + scrSize + 12;
 
 	uint8_t* out = (uint8_t*)calloc(1, total_size);
 	if (out == NULL) {
@@ -161,12 +149,12 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 
 	uint32_t offset = gpx_make_header(out, data, chrSize, colSize, scrSize);
 
-	offset += 64; // 0 header
+	offset += 64;
 	out[offset + 60] = data->background_color;
 	out[offset + 61] = data->multicolor0;
 	out[offset + 62] = data->multicolor1;
 
-	offset += 64; // 1 header
+	offset += 64; // slot payload
 
 	if (chrSize) {
 		if (data->pScreen && (data->mode == GPX_MODE_CHAR || data->mode == GPX_MODE_MULTICOLOR_CHAR)) {
@@ -195,6 +183,18 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 	if (scrSize && data->pScreen) { memcpy(out + offset, data->pScreen, scrSize); }
 	offset += scrSize;
 
+	offset += 12; // history pos, undo_count, redo_count
+
+/*	const int32_t history_pos = 0;
+	const int32_t history_undo_count = 0;
+	const int32_t history_redo_count = 0;
+	memcpy(out + offset, &history_pos, sizeof(history_pos));
+	offset += sizeof(history_pos);
+	memcpy(out + offset, &history_undo_count, sizeof(history_undo_count));
+	offset += sizeof(history_undo_count);
+	memcpy(out + offset, &history_redo_count, sizeof(history_redo_count));
+	offset += sizeof(history_redo_count);
+*/
 	mz_ulong compressed_size = compressBound((mz_ulong)offset);
 	uint8_t* compressed_data = (uint8_t*)malloc(compressed_size);
 	if (!compressed_data) {

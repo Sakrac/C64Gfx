@@ -110,6 +110,17 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 		gpx_status success = parse_gpx(gpxData, gpxSize, &gpx);
 		free(gpxData);
 
+		if (fopen("gpx_test.bin", "wb")) {
+			printf("saving gpx_orig.bin\n");
+			FILE* f;
+			FOpen(f, "gpx_orig.bin", "wb");
+			if (f) {
+				fwrite(gpx, sizeof(gpx_data), 1, f);
+				fclose(f);
+			}
+		}
+
+
 		if (success != GPX_OK) {
 			printf("Failed to parse GPX file %s: %s\n", file, gpx_status_to_string(success));
 			return NULL;
@@ -1071,6 +1082,7 @@ int main( int argc, char* argv[] )
 			}
 		}
 		const char* gpx = GetSwitch("gpx", swtc, swtn);
+		printf("GPX: %s\n", gpx ? gpx : "(none)");
 		if (gpx) {
 			gpx_data data = {
 				.pChars = bitmap,
@@ -1083,9 +1095,21 @@ int main( int argc, char* argv[] )
 			size_t gpx_file_size = 0;
 			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
 
+			printf("calling parse_gpx\n");
+
 			// test it!
 			gpx_data* data2;
 			gpx_status status = parse_gpx(gpx_file, gpx_file_size, &data2);
+			if (fopen("gpx_test.bin", "wb")) {
+				printf("saving gpx_test.bin\n");
+				FILE* f;
+				FOpen(f, "gpx_test.bin", "wb");
+				if (f) {
+					fwrite(data2, sizeof(gpx_data), 1, f);
+					fclose(f);
+				}
+			}
+			printf("GPX parse test: %s\n", gpx_status_to_string(status));
 
 			if (gpx_file) {
 				FILE* f;
