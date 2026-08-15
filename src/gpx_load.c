@@ -189,6 +189,13 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 	offset += chrSize;
 	if (colSize) {
 		memcpy(out + offset, data->pColors, colSize);
+		// pixcen uses the literal color values in multicolor char mode
+		// not the multicolor bitmask (8) to signify multicolor char.
+		if (data->mode == GPX_MODE_MULTICOLOR_CHAR) {
+			for (uint32_t i = 0; i < colSize; ++i) {
+				out[offset + i] &= 0x07;
+			}
+		}
 	}
 	offset += colSize;
 	if (scrSize && data->pScreen) {
