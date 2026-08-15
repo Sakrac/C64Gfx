@@ -1294,7 +1294,6 @@ int main( int argc, char* argv[] )
 		}
 
 		const char* gpx = GetSwitch("gpx", swtc, swtn);
-		printf("GPX: %s\n", gpx ? gpx : "(none)");
 		if (gpx) {
 			gpx_data data = {
 				.pChars = bitnap,
@@ -2050,7 +2049,6 @@ int main( int argc, char* argv[] )
 		printf("Used chars = %d\n", nunChars);
 
 		const char* gpx = GetSwitch("gpx", swtc, swtn);
-		printf("GPX: %s\n", gpx ? gpx : "(none)");
 		if (gpx) {
 			gpx_data data = {
 				.pChars = chars,
