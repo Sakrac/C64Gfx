@@ -106,33 +106,30 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 		fread(gpxData, 1, gpxSize, f);
 		fclose(f);
 
-		uint8_t* pPayload = NULL;
-		size_t PayloadSize = 0;
-		gpx_info info = { 0 };
-		gpx_status success = parse_gpx(gpxData, gpxSize, &info, &pPayload, &PayloadSize);
+		gpx_data *gpx = NULL;
+		gpx_status success = parse_gpx(gpxData, gpxSize, &gpx);
 		free(gpxData);
 
 		if (success != GPX_OK) {
 			printf("Failed to parse GPX file %s: %s\n", file, gpx_status_to_string(success));
-			if (pPayload) free(pPayload);
 			return NULL;
 		}
 
 		uint8_t* pImg = NULL;
 		size_t ImgSize = 0;
-		gpx_status buildSuccess = gpx_generate_bitmap(pPayload, PayloadSize, &info, &pImg, &ImgSize);
-		free(pPayload);
+		gpx_status buildSuccess = gpx_generate_bitmap(gpx, &pImg, &ImgSize);
 		if (buildSuccess != GPX_OK) {
 			printf("Failed to build indexed bitmap for GPX file %s: %s\n", file, gpx_status_to_string(buildSuccess));
 			if (pImg) free(pImg);
+			if (gpx) free(gpx);
 			return NULL;
 		}
 
-		if (wr) { *wr = info.xsize; }
-		if (hr) { *hr = info.ysize; }
+		if (wr) { *wr = gpx->width; }
+		if (hr) { *hr = gpx->height; }
+		free(gpx);
 		return pImg;
 	}
-
 
 	int w, h, n;
 	uint8_t *raw = stbi_load( file, &w, &h, &n, 0 ), *src = raw;
@@ -987,7 +984,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmap", swtc, swtn)) {
-		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>] [-png=<png>] [-dither=<1-64>]\n"); return 0; }
+		if (argn < 2) { printf("Usage:\nGfx -bitmap <image> [-out=<out>] [-png=<png>] [-gpx=<gpx>] [-dither=<1-64>]\n"); return 0; }
 		int w=1, h=1;
 		uint8_t* img = 0;
 
@@ -1072,6 +1069,34 @@ int main( int argc, char* argv[] )
 				fwrite(screen, wid * hgt, 1, f);
 				fclose(f);
 			}
+		}
+		const char* gpx = GetSwitch("gpx", swtc, swtn);
+		if (gpx) {
+			gpx_data data = {
+				.pChars = bitmap,
+				.pColors = 0,
+				.pScreen = screen,
+				.width = (int16_t)wid*8,
+				.height = (int16_t)hgt*8,
+				.mode = GPX_MODE_BITMAP,
+			};
+			size_t gpx_file_size = 0;
+			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
+
+			// test it!
+			gpx_data* data2;
+			gpx_status status = parse_gpx(gpx_file, gpx_file_size, &data2);
+
+			if (gpx_file) {
+				FILE* f;
+				FOpen(f, gpx, "wb");
+				if (f) {
+					fwrite(gpx_file, gpx_file_size, 1, f);
+					fclose(f);
+				}
+				free(gpx_file);
+			}
+
 		}
 		const char* png = GetSwitch("png", swtc, swtn);
 		if(png) {
