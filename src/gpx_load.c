@@ -519,7 +519,7 @@ uint8_t* create_image(const gpx_data data, size_t* out_size) {
 	int cw = w >> 3;
 	for (int cy = 0, ch = h >> 3; cy < ch; cy++) {
 		for (int cx = 0; cx < cw; cx++) {
-			const uint8_t screen_value = *screen++;
+			const uint8_t screen_value = screen ? *screen++ : 0;
 			const uint8_t color_value = colors ? *colors++ : 0;
 			const uint8_t* chardata = chars;
 			chars += 8;
