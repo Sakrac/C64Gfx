@@ -20,7 +20,7 @@ No part of the Pixcen source code is used in this implementation.
 
 This implementation is free to copy, use and modify for any
 purpose. It first appeared in https://github.com/sakrac/C64Gfx
-(by Carl-Henrik Skårman and is released under the MIT license.)
+(by Carl-Henrik Skårstedt and is released under the MIT license.)
 
 */
 
@@ -150,6 +150,7 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 	uint32_t offset = gpx_make_header(out, data, chrSize, colSize, scrSize);
 
 	offset += 64;
+	out[offset + 59] = 14; // l blue border
 	out[offset + 60] = data->background_color;
 	out[offset + 61] = data->multicolor0;
 	out[offset + 62] = data->multicolor1;
@@ -185,16 +186,6 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 
 	offset += 12; // history pos, undo_count, redo_count
 
-/*	const int32_t history_pos = 0;
-	const int32_t history_undo_count = 0;
-	const int32_t history_redo_count = 0;
-	memcpy(out + offset, &history_pos, sizeof(history_pos));
-	offset += sizeof(history_pos);
-	memcpy(out + offset, &history_undo_count, sizeof(history_undo_count));
-	offset += sizeof(history_undo_count);
-	memcpy(out + offset, &history_redo_count, sizeof(history_redo_count));
-	offset += sizeof(history_redo_count);
-*/
 	mz_ulong compressed_size = compressBound((mz_ulong)offset);
 	uint8_t* compressed_data = (uint8_t*)malloc(compressed_size);
 	if (!compressed_data) {
@@ -282,7 +273,7 @@ gpx_data gpx_extract_data(const unsigned char* buffer, size_t buffer_size, const
 	return data;
 }
 
-gpx_status parse_gpx(const unsigned char* in_data, size_t in_size, gpx_data** ppData) {
+gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** ppData) {
 	const unsigned char* p;
 	const unsigned char* end;
 	unsigned char* decompressed = NULL;

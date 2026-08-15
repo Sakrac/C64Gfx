@@ -107,19 +107,8 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 		fclose(f);
 
 		gpx_data *gpx = NULL;
-		gpx_status success = parse_gpx(gpxData, gpxSize, &gpx);
+		gpx_status success = gpx_parse(gpxData, gpxSize, &gpx);
 		free(gpxData);
-
-		if (fopen("gpx_test.bin", "wb")) {
-			printf("saving gpx_orig.bin\n");
-			FILE* f;
-			FOpen(f, "gpx_orig.bin", "wb");
-			if (f) {
-				fwrite(gpx, sizeof(gpx_data), 1, f);
-				fclose(f);
-			}
-		}
-
 
 		if (success != GPX_OK) {
 			printf("Failed to parse GPX file %s: %s\n", file, gpx_status_to_string(success));
@@ -1082,7 +1071,6 @@ int main( int argc, char* argv[] )
 			}
 		}
 		const char* gpx = GetSwitch("gpx", swtc, swtn);
-		printf("GPX: %s\n", gpx ? gpx : "(none)");
 		if (gpx) {
 			gpx_data data = {
 				.pChars = bitmap,
@@ -1094,23 +1082,6 @@ int main( int argc, char* argv[] )
 			};
 			size_t gpx_file_size = 0;
 			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
-
-			printf("calling parse_gpx\n");
-
-			// test it!
-			gpx_data* data2;
-			gpx_status status = parse_gpx(gpx_file, gpx_file_size, &data2);
-			if (fopen("gpx_test.bin", "wb")) {
-				printf("saving gpx_test.bin\n");
-				FILE* f;
-				FOpen(f, "gpx_test.bin", "wb");
-				if (f) {
-					fwrite(data2, sizeof(gpx_data), 1, f);
-					fclose(f);
-				}
-			}
-			printf("GPX parse test: %s\n", gpx_status_to_string(status));
-
 			if (gpx_file) {
 				FILE* f;
 				FOpen(f, gpx, "wb");
@@ -1120,7 +1091,6 @@ int main( int argc, char* argv[] )
 				}
 				free(gpx_file);
 			}
-
 		}
 		const char* png = GetSwitch("png", swtc, swtn);
 		if(png) {
@@ -1162,7 +1132,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("bitmapmc", swtc, swtn)) {
-		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>] [-koala=<koala-file>] [-png=<png-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
+		if (argn < 3) { printf("Usage:\nGfx -bitmapmc <image> <bg> [-out=<out>] [-koala=<koala-file>] [-png=<png-file>] [gpx=<gpx-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=<1-64>] [-subst=<subst.png>,col0,col1..]\n"); return 0; }
 
 		int w = 1, h = 1;
 		uint8_t* img = 0;
@@ -1294,7 +1264,6 @@ int main( int argc, char* argv[] )
 						uint8_t b = 0;
 						for (int xp = 0; xp < 8; xp += 2) {
 							uint8_t c = ((x * 8 + xp) < w && (y * 8 + yp) < h) ? s[xp + yp * w] : bg;
-//							uint8_t c = s[xp + yp * w];
 							b <<= 2;
 							if (c != bg) {
 								if (c != col[1] && c != col[2] && c != col[3]) { c = (uint8_t)ClosestColor(c, col, 4); }
@@ -1321,6 +1290,32 @@ int main( int argc, char* argv[] )
 			else {
 				out = GetSwitch("png", swtc, swtn);
 				if(out) { save_as_png++; }
+			}
+		}
+
+		const char* gpx = GetSwitch("gpx", swtc, swtn);
+		printf("GPX: %s\n", gpx ? gpx : "(none)");
+		if (gpx) {
+			gpx_data data = {
+				.pChars = bitnap,
+				.pColors = color,
+				.pScreen = screen,
+				.width = (int16_t)wc * 8,
+				.height = (int16_t)hc * 8,
+				.mode = GPX_MODE_MULTICOLOR_BITMAP,
+				.background_color = bg
+			};
+
+			size_t gpx_file_size = 0;
+			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
+			if (gpx_file) {
+				FILE* f;
+				FOpen(f, gpx, "wb");
+				if (f) {
+					fwrite(gpx_file, gpx_file_size, 1, f);
+					fclose(f);
+				}
+				free(gpx_file);
 			}
 		}
 
@@ -1608,7 +1603,7 @@ int main( int argc, char* argv[] )
 	}
 
 	if (GetSwitch("textmc", swtc, swtn)) {
-		if (argn < 5) { printf("Usage:\nGfx -textmc <image> <bg> <col0> <col1> -out=<out> [-wid=char width] [-hgt=char height] [-skip0] [-rawcol]\n"); return 0; }
+		if (argn < 5) { printf("Usage:\nGfx -textmc <image> <bg> <col0> <col1> -out=<out> [-gpx=file] [-wid=char width] [-hgt=char height] [-skip0] [-rawcol]\n"); return 0; }
 
 		uint8_t cols[3] = { (uint8_t)atoi(args[2]), (uint8_t)atoi(args[3]), (uint8_t)atoi(args[4]) };
 
@@ -1687,6 +1682,31 @@ int main( int argc, char* argv[] )
 		}
 		printf( "Used chars for %s = %d\n", args[1], nunChars );
 
+		const char* gpx = GetSwitch("gpx", swtc, swtn);
+		if (gpx) {
+			gpx_data data = {
+				.pChars = chars,
+				.pColors = color,
+				.pScreen = screen,
+				.width = (int16_t)wc * 8,
+				.height = (int16_t)hc * 8,
+				.mode = GPX_MODE_MULTICOLOR_CHAR,
+				.background_color = cols[0],
+				.multicolor0 = cols[1],
+				.multicolor1 = cols[2]
+			};
+			size_t gpx_file_size = 0;
+			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
+			if (gpx_file) {
+				FILE* f;
+				FOpen(f, gpx, "wb");
+				if (f) {
+					fwrite(gpx_file, gpx_file_size, 1, f);
+					fclose(f);
+				}
+				free(gpx_file);
+			}
+		}
 		const char* out = GetSwitch( "out", swtc, swtn );
 		if( out ) {
 			size_t outLen = strlen( out );
@@ -1963,7 +1983,7 @@ int main( int argc, char* argv[] )
 
 	if (GetSwitch("texthires", swtc, swtn)) {
 		int w, h;
-		if (argn <= 1) { printf("Usage:\nGfx -texthires <image> [-bg=col] [-out=file] [-skip0] [-rawcol]\n * creates .chr, .scr, .col files\n"); return 0; }
+		if (argn <= 1) { printf("Usage:\nGfx -texthires <image> [-bg=col] [-out=file] [-gpx=file] [-skip0] [-rawcol]\n * creates .chr, .scr, .col files\n"); return 0; }
 
 		uint8_t* img = LoadPicture(args[1], &w, &h);
 		if (!img) {
@@ -2029,6 +2049,30 @@ int main( int argc, char* argv[] )
 
 		printf("Used chars = %d\n", nunChars);
 
+		const char* gpx = GetSwitch("gpx", swtc, swtn);
+		printf("GPX: %s\n", gpx ? gpx : "(none)");
+		if (gpx) {
+			gpx_data data = {
+				.pChars = chars,
+				.pColors = color,
+				.pScreen = screen,
+				.width = (int16_t)wc * 8,
+				.height = (int16_t)hc * 8,
+				.mode = GPX_MODE_CHAR,
+				.background_color = bg
+			};
+			size_t gpx_file_size = 0;
+			uint8_t* gpx_file = gpx_create(&data, &gpx_file_size);
+			if (gpx_file) {
+				FILE* f;
+				FOpen(f, gpx, "wb");
+				if (f) {
+					fwrite(gpx_file, gpx_file_size, 1, f);
+					fclose(f);
+				}
+				free(gpx_file);
+			}
+		}
 		const char* out = GetSwitch("out", swtc, swtn);
 		if (out) {
 			size_t outLen = strlen(out);

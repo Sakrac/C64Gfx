@@ -41,7 +41,7 @@ typedef struct gpx_data {
 } gpx_data;
 
 // Read the the GPX header and metadata, Returns GPX_OK on success, or an error code on failure. The caller is responsible for freeing *data if the function returns GPX_OK.
-gpx_status parse_gpx(const unsigned char* in_data, size_t in_size, gpx_data** data);
+gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** data);
 
 // Generate a bitmap from the GPX data. Returns GPX_OK on success, or an error code on failure. The caller is responsible for freeing the out_buffer if the function returns GPX_OK.
 gpx_status gpx_generate_bitmap(const gpx_data* data, unsigned char** out_buffer, size_t* out_size);
