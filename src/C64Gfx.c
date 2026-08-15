@@ -133,7 +133,7 @@ uint8_t* LoadPicture( const char* file, int* wr, int* hr )
 
 	int w, h, n;
 	uint8_t *raw = stbi_load( file, &w, &h, &n, 0 ), *src = raw;
-	if (!raw) { return 0; }
+	if (n < 3 || !raw) { return 0; }
 	uint8_t *img = (uint8_t*)malloc( (size_t)w * (size_t)h ), *dst = img;
 	if (img) {
 		for (int p = 0, np = w * h; p < np; ++p) {
@@ -176,7 +176,7 @@ uint8_t* LoadPictureDither(const char* file, int* wr, int* hr, int ditherStep, i
 {
 	int w, h, n;
 	uint8_t* raw = stbi_load(file, &w, &h, &n, 0), * src = raw;
-	if (!raw) { return 0; }
+	if (n < 3 || !raw) { return 0; }
 	uint8_t* img = (uint8_t*)malloc((size_t)w * (size_t)h), * dst = img;
 	if (img) {
 		for (int y = 0; y < h; ++y) {
@@ -556,7 +556,7 @@ int LoadPalette(const char* paletteFilename)
 {
 	int x, y, n;
 	uint8_t* data = stbi_load(paletteFilename, &x, &y, &n, 0);
-	if (data) {
+	if (n>=3 && data) {
 		uint8_t* scan = data;
 		size_t colIdx = 0;
 		size_t pixels = x * y, curr = 1;
@@ -611,8 +611,8 @@ void WriteColorFile(const char* out, uint8_t* colors, size_t colorCount, int rep
 		WriteBinaryFileWithExtension(out, ".col", colors, colorCount * (size_t)repeat);
 		return;
 	}
-	for (size_t i = 0; i < colorCount; i += 2) {
-		colors[i / 2] = (colors[i] & 0xf) | (colors[i + 1] << 4);
+	for (size_t i = 0; i < colorCount/2; i++) {
+		colors[i] = (colors[i * 2] & 0xf) | (colors[i * 2 + 1] << 4);
 	}
 	WriteBinaryFileWithExtension(out, ".col", colors, (colorCount / 2) * (size_t)repeat);
 }
@@ -648,6 +648,10 @@ int main( int argc, char* argv[] )
 	for( int a = 0; a < argc; ++a ) {
 		if( argv[ a ][ 0 ] == '-' ) { swtc[ swtn++ ] = argv[ a ] + 1; }
 		else { args[ argn++ ] = argv[ a ]; }
+		if (argn >= MAX_ARGS || swtn >= MAX_ARGS) {
+			printf("Too many arguments or switches, continuing with what was accepted\n");
+			break;
+		}
 	}
 
 	if (GetSwitch("dir",swtc,swtn)) {
@@ -1042,6 +1046,7 @@ int main( int argc, char* argv[] )
 		if( argn < 3 ) { printf( "Usage:\nGfx -agnus <image> <out>\n" ); return 0; }
 		int w, h, n;
 		uint8_t *raw = stbi_load( args[1], &w, &h, &n, 0 );
+		if (n < 3) { printf("Error: Image must be at least 3 channels (RGB)\n"); return 1; }
 		if( raw ) {
 			uint8_t* outbuf = (uint8_t*)malloc( (w / 2) * (h / 2) ), *out = outbuf;
 			for( int y = 0, ny = h / 2; y < ny; ++y ) {
@@ -1214,6 +1219,8 @@ int main( int argc, char* argv[] )
 			wc = 40;
 			hc = 25;
 		}
+
+		if (wc==0 || hc==0) { printf("Error: image too small for bitmapmc\n"); return 1; }
 
 		const char *subst = GetSwitch("subst", swtc, swtn);
 		if (subst) {

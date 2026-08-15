@@ -29,10 +29,10 @@ purpose. It first appeared in https://github.com/sakrac/C64Gfx
 
 #include "gpx_load.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 #define MINIZ_NO_ARCHIVE_APIS
 #define MINIZ_NO_STDIO
@@ -42,7 +42,8 @@ purpose. It first appeared in https://github.com/sakrac/C64Gfx
 #define GPX_MAX_HEADER_SIZE 1024
 
 bool gpx_is_multicolor(gpx_mode mode) {
-	return 	mode == GPX_MODE_MULTICOLOR_BITMAP || mode == GPX_MODE_MULTICOLOR_CHAR || mode == GPX_MODE_MULTICOLOR_SPRITE;
+	return mode == GPX_MODE_MULTICOLOR_BITMAP ||
+		mode == GPX_MODE_MULTICOLOR_CHAR || mode == GPX_MODE_MULTICOLOR_SPRITE;
 }
 
 uint32_t gpx_assign_u32(uint32_t value, uint8_t* out_bytes) {
@@ -70,14 +71,17 @@ uint32_t gpx_assign_wide_num(uint32_t value, uint8_t* out_bytes) {
 	return (digit_count + 1) * 2;
 }
 
-uint32_t gpx_assign_string_wide_num(const char* key, uint32_t value, uint8_t* out_bytes) {
+uint32_t gpx_assign_string_wide_num(const char* key, uint32_t value,
+	uint8_t* out_bytes) {
 	uint32_t key_length = (uint32_t)strlen(key);
 	memcpy(out_bytes, key, key_length);
 	out_bytes[key_length] = 0;
-	return gpx_assign_wide_num(value, out_bytes + key_length + 1) + key_length + 1;
+	return gpx_assign_wide_num(value, out_bytes + key_length + 1) + key_length +
+		1;
 }
 
-uint32_t gpx_make_header(uint8_t* header, const gpx_data* data, uint32_t chrSize, uint32_t colSize, uint32_t scrSize) {
+uint32_t gpx_make_header(uint8_t* header, const gpx_data* data,
+	uint32_t chrSize, uint32_t colSize, uint32_t scrSize) {
 	uint32_t offset = 0;
 	offset += gpx_assign_u32(4, header + offset);
 	offset += gpx_assign_u32((uint32_t)data->mode, header + offset);
@@ -97,7 +101,8 @@ uint32_t gpx_make_header(uint8_t* header, const gpx_data* data, uint32_t chrSize
 	offset += gpx_assign_string_wide_num("pscr", 24576, header + offset);
 	offset += gpx_assign_string_wide_num("screensize", scrSize, header + offset);
 	offset += gpx_assign_string_wide_num("xsize", gpx_width, header + offset);
-	offset += gpx_assign_string_wide_num("ysize", (uint32_t)data->height, header + offset);
+	offset += gpx_assign_string_wide_num("ysize", (uint32_t)data->height,
+		header + offset);
 	return offset;
 }
 
@@ -114,7 +119,8 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 			chrSize = scrSize * 8;
 			break;
 		case GPX_MODE_SPRITE:
-			chrSize = (((uint32_t)data->width / 24) * ((uint32_t)data->height / 21) * 64);
+			chrSize =
+				(((uint32_t)data->width / 24) * ((uint32_t)data->height / 21) * 64);
 			break;
 		case GPX_MODE_MULTICOLOR_SPRITE:
 			colSize = ((uint32_t)data->width / 12) * ((uint32_t)data->height / 21);
@@ -140,7 +146,8 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 			break;
 	}
 
-	size_t total_size = GPX_MAX_HEADER_SIZE + 64 + 64 + chrSize + colSize + scrSize + 12;
+	size_t total_size =
+		GPX_MAX_HEADER_SIZE + 64 + 64 + chrSize + colSize + scrSize + 12;
 
 	uint8_t* out = (uint8_t*)calloc(1, total_size);
 	if (out == NULL) {
@@ -158,8 +165,9 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 	offset += 64; // slot payload
 
 	if (chrSize) {
-		if (data->pScreen && (data->mode == GPX_MODE_CHAR || data->mode == GPX_MODE_MULTICOLOR_CHAR)) {
-			// if char mode and screen data applied unpack into bitmap
+		if (data->pScreen && (data->mode == GPX_MODE_CHAR ||
+			data->mode == GPX_MODE_MULTICOLOR_CHAR)) {
+// if char mode and screen data applied unpack into bitmap
 			uint8_t* map = out + offset;
 			for (uint32_t y = 0, h = data->height >> 3; y < h; ++y) {
 				for (uint32_t x = 0, w = data->width >> 3; x < w; ++x) {
@@ -170,7 +178,7 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 				}
 			}
 		} else if (data->mode == GPX_MODE_WIDE_UNRESTRICTED) {
-			// unrestricted wide just picks every second map byte
+		  // unrestricted wide just picks every second map byte
 			for (uint32_t i = 0; i < chrSize; i++) {
 				out[offset + i] = data->pChars[i << 1];
 			}
@@ -179,9 +187,13 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 		}
 	}
 	offset += chrSize;
-	if (colSize) { memcpy(out + offset, data->pColors, colSize); }
+	if (colSize) {
+		memcpy(out + offset, data->pColors, colSize);
+	}
 	offset += colSize;
-	if (scrSize && data->pScreen) { memcpy(out + offset, data->pScreen, scrSize); }
+	if (scrSize && data->pScreen) {
+		memcpy(out + offset, data->pScreen, scrSize);
+	}
 	offset += scrSize;
 
 	offset += 12; // history pos, undo_count, redo_count
@@ -194,7 +206,8 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 	}
 
 	compressed_size = (mz_ulong)compressed_size;
-	uint32_t status = compress2(compressed_data, &compressed_size, out, (mz_ulong)offset, MZ_BEST_COMPRESSION);
+	uint32_t status = compress2(compressed_data, &compressed_size, out,
+		(mz_ulong)offset, MZ_BEST_COMPRESSION);
 	if (status != MZ_OK) {
 		free(out);
 		free(compressed_data);
@@ -207,7 +220,8 @@ uint8_t* gpx_create(const gpx_data* data, size_t* out_size) {
 }
 
 static inline int32_t read_le32(const unsigned char* p) {
-	return (int32_t)((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
+	return (int32_t)((uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+		((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
 }
 
 // Internal data struct
@@ -235,7 +249,8 @@ typedef struct {
 	uint32_t payload_offset;
 } gpx_info;
 
-gpx_data gpx_extract_data(const unsigned char* buffer, size_t buffer_size, const gpx_info* info) {
+gpx_data gpx_extract_data(const unsigned char* buffer, size_t buffer_size,
+	const gpx_info* info) {
 	gpx_data data = { 0 };
 	size_t slot_size;
 	size_t slot_index;
@@ -250,20 +265,25 @@ gpx_data gpx_extract_data(const unsigned char* buffer, size_t buffer_size, const
 	if (info->backbuffers <= 0) {
 		return data;
 	}
-	slot_size = 64 + (size_t)info->mapsize + (size_t)info->screensize + (size_t)info->colorsize;
+	slot_size = 64 + (size_t)info->mapsize + (size_t)info->screensize +
+		(size_t)info->colorsize;
 	slot_index = (size_t)(info->backbufsel >= 0 ? info->backbufsel : 0);
 	if (slot_index >= (size_t)info->backbuffers) {
 		return data;
 	}
 	slot_offset = 64 + slot_size * slot_index;
 	map_offset = info->payload_offset + slot_offset + 64;
-	if (map_offset > buffer_size || (size_t)info->mapsize > buffer_size - map_offset) {
+	size_t expected_size = map_offset + (size_t)info->mapsize +
+		(size_t)info->colorsize + (size_t)info->screensize;
+
+	if (expected_size > buffer_size) {
 		return data;
 	}
 
 	data.pChars = buffer + map_offset;
 	data.pColors = info->colorsize ? data.pChars + info->mapsize : 0;
-	data.pScreen = info->screensize ? data.pChars + info->mapsize + info->colorsize : 0;
+	data.pScreen =
+		info->screensize ? data.pChars + info->mapsize + info->colorsize : 0;
 	data.width = (uint16_t)info->xsize;
 	data.height = (uint16_t)info->ysize;
 	data.mode = (gpx_mode)info->mode;
@@ -273,7 +293,8 @@ gpx_data gpx_extract_data(const unsigned char* buffer, size_t buffer_size, const
 	return data;
 }
 
-gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** ppData) {
+gpx_status gpx_parse(const unsigned char* in_data, size_t in_size,
+	gpx_data** ppData) {
 	const unsigned char* p;
 	const unsigned char* end;
 	unsigned char* decompressed = NULL;
@@ -300,6 +321,10 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 			break;
 		}
 		if (status == MZ_BUF_ERROR) {
+			if (decompressed_size >= 0x1000000U) {
+				free(decompressed);
+				return GPX_ERR_DECOMPRESSION_FAILED;
+			}
 			decompressed_size *= 2;
 			decompressed = (unsigned char*)realloc(decompressed, decompressed_size);
 			if (!decompressed) {
@@ -315,7 +340,7 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 	p = decompressed;
 	end = decompressed + decompressed_size;
 
-	if (decompressed_size < 8) {
+	if (decompressed_size < 12) {
 		free(decompressed);
 		return GPX_ERR_INVALID_INPUT;
 	}
@@ -346,8 +371,10 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 				return GPX_ERR_TRUNCATED_METADATA;
 			}
 			const char* key = (const char*)p;
-			while (p < end && *p) { p++; }
-			if (p == end) {
+			while (p < end && *p) {
+				p++;
+			}
+			if ( ( p + 1 ) >= end) {
 				free(decompressed);
 				return GPX_ERR_TRUNCATED_METADATA;
 			}
@@ -355,7 +382,7 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 
 			int32_t arg = 0;
 			while (p < end && *p) {
-				if (*p < '0' || *p>'9') {
+				if (*p < '0' || *p > '9') {
 					free(decompressed);
 					return GPX_ERR_TRUNCATED_METADATA;
 				}
@@ -406,16 +433,14 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 		}
 	}
 
+	if (info.colorsize < 0 || info.mapsize < 0 || info.screensize < 0) {
+		free(decompressed);
+		return GPX_ERR_BAD_METADATA;
+	}
+
 	// give multicolor double width so it matches Pixcen exported png
-	switch (info.mode) {
-		case GPX_MODE_MULTICOLOR_BITMAP:
-		case GPX_MODE_MULTICOLOR_SPRITE:
-		case GPX_MODE_MULTICOLOR_CHAR:
-		case GPX_MODE_WIDE_UNRESTRICTED:
-			info.xsize *= 2;
-			break;
-		default:
-			break;
+	if (gpx_is_multicolor((gpx_mode)info.mode)) {
+		info.xsize *= 2;
 	}
 
 	if (info.mapsize <= 0 || info.backbuffers <= 0) {
@@ -426,7 +451,8 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 	info.payload_offset = (uint32_t)(p - decompressed);
 
 	if (info.payload_offset + 64 <= (size_t)decompressed_size) {
-		size_t slot_size = 64 + (size_t)info.mapsize + (size_t)info.screensize + (size_t)info.colorsize;
+		size_t slot_size = 64 + (size_t)info.mapsize + (size_t)info.screensize +
+			(size_t)info.colorsize;
 		size_t slot_index = (size_t)(info.backbufsel >= 0 ? info.backbufsel : 0);
 		size_t slot_offset = 64 + slot_size * slot_index;
 		size_t slot_base = info.payload_offset + slot_offset;
@@ -439,9 +465,18 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 	}
 
 	// allocate the gpx_data together with the display data
-	gpx_data* data = (gpx_data*)malloc(sizeof(gpx_data) + info.mapsize + info.colorsize + info.screensize);
+	gpx_data* data = (gpx_data*)malloc(sizeof(gpx_data) + info.mapsize +
+		info.colorsize + info.screensize);
 
 	*data = gpx_extract_data(decompressed, decompressed_size, &info);
+
+	// check that the extracted data is valid
+	if (data->pChars == NULL || (info.colorsize > 0 && data->pColors == NULL) ||
+		(info.screensize > 0 && data->pScreen == NULL)) {
+		free(decompressed);
+		free(data);
+		return GPX_ERR_BAD_METADATA;
+	}
 
 	if (info.mapsize) {
 		memcpy((uint8_t*)(data + 1), data->pChars, info.mapsize);
@@ -452,7 +487,8 @@ gpx_status gpx_parse(const unsigned char* in_data, size_t in_size, gpx_data** pp
 		data->pColors = (uint8_t*)(data + 1) + info.mapsize;
 	}
 	if (info.screensize) {
-		memcpy((uint8_t*)(data + 1) + info.mapsize + info.colorsize, data->pScreen, info.screensize);
+		memcpy((uint8_t*)(data + 1) + info.mapsize + info.colorsize, data->pScreen,
+			info.screensize);
 		data->pScreen = (uint8_t*)(data + 1) + info.mapsize + info.colorsize;
 	}
 	free(decompressed);
@@ -476,7 +512,9 @@ uint8_t* create_image(const gpx_data data, size_t* out_size) {
 	if (!image) {
 		return NULL;
 	}
-	if (out_size) { *out_size = (size_t)(w * h); }
+	if (out_size) {
+		*out_size = (size_t)(w * h);
+	}
 
 	// Unrestricted modes
 	if (mode == GPX_MODE_UNRESTRICTED) {
@@ -489,9 +527,11 @@ uint8_t* create_image(const gpx_data data, size_t* out_size) {
 		return image;
 	}
 
-	bool mc = mode == GPX_MODE_MULTICOLOR_BITMAP || mode == GPX_MODE_MULTICOLOR_CHAR || mode == GPX_MODE_MULTICOLOR_SPRITE;
+	bool mc = mode == GPX_MODE_MULTICOLOR_BITMAP ||
+		mode == GPX_MODE_MULTICOLOR_CHAR ||
+		mode == GPX_MODE_MULTICOLOR_SPRITE;
 
-	// Sprite based modes
+// Sprite based modes
 	if (mode == GPX_MODE_SPRITE || mode == GPX_MODE_MULTICOLOR_SPRITE) {
 		uint8_t color_lookup[4] = { bg, mc0, 0, mc1 };
 		int sw = w / 24;
@@ -502,10 +542,10 @@ uint8_t* create_image(const gpx_data data, size_t* out_size) {
 					for (int xb = 0; xb < 3; xb++) {
 						uint8_t b = *chars++;
 						for (int x = 0; x < 8; x++) {
-							uint8_t color_index = mc ?
-								((b >> (~x & 6)) & 3) :
-								((b >> (~x & 7)) & 1);
-							image[(sy * 21 + y) * w + (sx * 24 + xb * 8 + x)] = color_lookup[color_index];
+							uint8_t color_index =
+								mc ? ((b >> (~x & 6)) & 3) : ((b >> (~x & 7)) & 1);
+							image[(sy * 21 + y) * w + (sx * 24 + xb * 8 + x)] =
+								color_lookup[color_index];
 						}
 					}
 				}
@@ -563,22 +603,36 @@ uint8_t* create_image(const gpx_data data, size_t* out_size) {
 	return image;
 }
 
-gpx_status gpx_generate_bitmap(const gpx_data* data, unsigned char** out_buffer, size_t* out_size) {
+gpx_status gpx_generate_bitmap(const gpx_data* data, unsigned char** out_buffer,
+	size_t* out_size) {
+
+	if (!out_buffer) {
+		return GPX_ERR_INVALID_INPUT;
+	}
 
 	*out_buffer = create_image(*data, out_size);
-	return out_buffer ? GPX_OK : GPX_ERR_OUT_OF_MEMORY;
+	return *out_buffer ? GPX_OK : GPX_ERR_OUT_OF_MEMORY;
 }
 
 const char* gpx_status_to_string(gpx_status status) {
 	switch (status) {
-		case GPX_OK: return "ok";
-		case GPX_ERR_INVALID_INPUT: return "invalid input";
-		case GPX_ERR_OUT_OF_MEMORY: return "out of memory";
-		case GPX_ERR_DECOMPRESSION_FAILED: return "decompression failed";
-		case GPX_ERR_UNSUPPORTED_VERSION: return "unsupported version";
-		case GPX_ERR_LEGACY_UNSUPPORTED: return "legacy GPX unsupported";
-		case GPX_ERR_TRUNCATED_METADATA: return "truncated metadata";
-		case GPX_ERR_BAD_METADATA: return "bad metadata";
-		default: return "unknown error";
+		case GPX_OK:
+			return "ok";
+		case GPX_ERR_INVALID_INPUT:
+			return "invalid input";
+		case GPX_ERR_OUT_OF_MEMORY:
+			return "out of memory";
+		case GPX_ERR_DECOMPRESSION_FAILED:
+			return "decompression failed";
+		case GPX_ERR_UNSUPPORTED_VERSION:
+			return "unsupported version";
+		case GPX_ERR_LEGACY_UNSUPPORTED:
+			return "legacy GPX unsupported";
+		case GPX_ERR_TRUNCATED_METADATA:
+			return "truncated metadata";
+		case GPX_ERR_BAD_METADATA:
+			return "bad metadata";
+		default:
+			return "unknown error";
 	}
 }
