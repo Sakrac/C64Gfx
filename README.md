@@ -4,7 +4,10 @@ Utility to convert image files to C64 binary files
 Find the current binary in [releases](https://github.com/Sakrac/C64Gfx/releases)
 
 ## Updates
+* Added GPX save file for bitmap, bitmapmc, texthires, textmc
+* Various buffer and color channel count checks
 
+### Older Updates
 * Added native GPX file format loading (native Pixcen format)
 * Switched to cmake project, can generate a visual studio project or simply build directly, see below
 * Removed some redundant outputs
@@ -62,7 +65,7 @@ Example: `C64Gfx -columns image.png output 0 5 3x21 -mc=1,2,3 -pad=1`
 
 Text mode multicolor image conversion
 
-C64Gfx -textmc \<image> \<bg> \<col0> \<col1> -out=\<out> [-wid=char width] [-hgt=char height] [-skip0] [-rawcol]
+C64Gfx -textmc \<image> \<bg> \<col0> \<col1> -out=\<out> [-gpx=\<file.gpx>] [-wid=char width] [-hgt=char height] [-skip0] [-rawcol]
 
 Example: `C64Gfx -textmc picture.png 6 14 3 -out=picture`
 
@@ -76,7 +79,7 @@ Example: `C64Gfx -textmc picture.png 6 14 3 -out=picture`
 
 ## -texthires
 
-C64Gfx -texthires \<image> [-bg=col] [-out=file] [-skip0] [-rawcol]
+C64Gfx -texthires \<image> [-bg=col] [-out=\<file>] [-gpx=\<file.gpx>] [-skip0] [-rawcol]
 
 Example: `C64Gfx -texthires picture.png -out=picture`
 
@@ -84,13 +87,13 @@ Creates .chr, .scr and .col files.
 
 ## -bitmap
 
-C64Gfx -bitmap \<image> [-out=\<out>] [-png=\<png>] [-dither=\<1-64>]
+C64Gfx -bitmap \<image> [-out=\<out>] [-png=\<png>] [-gpx=\<file.gpx>] [-dither=\<1-64>]
 
 Example: `C64Gfx -bitmap picture.png -out=picture -png=picture_preview`
 
 ## -bitmapmc
 
-C64Gfx -bitmapmc \<image> \<bg> [-out=\<out>] [-koala=\<koala-file>] [-png=\<png-file>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=\<1-64>] [-subst=\<subst.png>,col0,col1..]
+C64Gfx -bitmapmc \<image> \<bg> [-out=\<out>] [-koala=\<koala-file>] [-png=\<png-file>] [-gpx=\<file.gpx>] [-wid=char width] [-hgt=char height] [-rawcol] [-count=num] [-dither=\<1-64>] [-subst=\<subst.png>,col0,col1..]
 
 Example: `C64Gfx -bitmapmc picture.png 0 -koala=picture`
 
