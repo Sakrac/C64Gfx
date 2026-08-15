@@ -333,12 +333,19 @@ uint8_t* LoadPictureWithDitherOption(const char* file, int* wr, int* hr, char** 
 	return img;
 }
 
-int FindOrAddCharacter(uint8_t* chars, int* numChars, int maxChars, const uint8_t* candidate)
+int FindCharacter(const uint8_t* chars, int numChars, const uint8_t* candidate)
 {
-	int index = 0;
-	for (; index < *numChars; ++index) {
+	for (int index = 0; index < numChars; ++index) {
 		if (memcmp(chars + index * 8, candidate, 8) == 0) { return index; }
 	}
+	return -1;
+}
+
+int FindOrAddCharacter(uint8_t* chars, int* numChars, int maxChars, const uint8_t* candidate)
+{
+	int index = FindCharacter(chars, *numChars, candidate);
+	if (index >= 0) { return index; }
+	index = *numChars;
 	if (index >= maxChars) { return 0; }
 	memcpy(chars + index * 8, candidate, 8);
 	++*numChars;
@@ -1716,7 +1723,7 @@ int main( int argc, char* argv[] )
 				memcpy( file + strlen( args[ i ] ), imapExt, strlen( imapExt ) + 1 );
 			}
 			FILE* f;
-			FOpen(f, file, "wb" );
+			FOpen(f, file, "rb" );
 			if( f ) {
 				fseek( f, 0, SEEK_END );
 				size_t size = ftell( f );
@@ -1747,21 +1754,10 @@ int main( int argc, char* argv[] )
 						if( ecm ) { c &= 0x3f; }
 						if( !refd[ c ] ) {
 							uint8_t *cmp = data + (int)(c) * 8;
-							uint8_t* chr = all;
-							uint8_t found = 0;
+							int foundIndex = FindCharacter(all, numChr, cmp);
+							uint8_t found = foundIndex >= 0;
 							uint8_t index = 0;
-							for( int s = 0; s < numChr && !found; ++s ) {
-								uint8_t same = 1;
-								for( int r = 0; r < 8 && same; ++r ) {
-									if( chr[ r ] != cmp[ r ] ) { same = 0; }
-								}
-								if( same ) {
-									found++;
-									index = (uint8_t)s;
-									break;
-								}
-								chr += 8;
-							}
+							if( found ) { index = (uint8_t)foundIndex; }
 							if( !found ) {
 								index = (uint8_t)numChr;
 								if( numChr < 256 ) {
@@ -1813,7 +1809,7 @@ int main( int argc, char* argv[] )
 		}
 		if( !err ) {
 			FILE* f;
-			FOpen(f, file, "wb" );
+			FOpen(f, out, "wb" );
 			if( f ) {
 				fwrite( all, numChr * 8, 1, f );
 				fclose( f );
@@ -1839,7 +1835,7 @@ int main( int argc, char* argv[] )
 			memcpy( file, args[i], strlen(args[i]) );
 			memcpy( file + strlen( args[ i ] ), extChr, strlen( extChr ) + 1 );
 			FILE* f;
-			FOpen(f, file, "wb" );
+			FOpen(f, file, "rb" );
 			if( f ) {
 				fseek( f, 0, SEEK_END );
 				size_t size = ftell( f );
@@ -1851,20 +1847,9 @@ int main( int argc, char* argv[] )
 				uint8_t* map = (uint8_t*)malloc( size / 8 );
 				uint8_t* cmp = data;
 				for( size_t c = 0, n = size / 8; c < n; ++c ) {
-					uint8_t* chr = all;
-					uint8_t found = 0;
-					for( int s=0; s < numChr && !found; ++s ) {
-						uint8_t same = 1;
-						for( int r = 0; r < 8 && same; ++r ) {
-							if( chr[r] != cmp[r] ) { same = 0; }
-						}
-						if( same ) {
-							found++;
-							map[ c ] = (uint8_t)s;
-							break;
-						}
-						chr += 8;
-					}
+					int foundIndex = FindCharacter(all, numChr, cmp);
+					uint8_t found = foundIndex >= 0;
+					if( found ) { map[ c ] = (uint8_t)foundIndex; }
 					if( !found ) {
 						map[ c ] = (uint8_t)numChr;
 						if( numChr < 256 ) {
@@ -1895,7 +1880,7 @@ int main( int argc, char* argv[] )
 		}
 		if( !err ) {
 			FILE* f;
-			FOpen(f, file, "wb" );
+			FOpen(f, out, "wb" );
 			if( f ) {
 				fwrite( all, numChr * 8, 1, f );
 				fclose( f );
@@ -1945,23 +1930,7 @@ int main( int argc, char* argv[] )
 					}
 				}
 				if (fgc>=0) {
-					int c = 0;
-					for (; c < nunChars; ++c) {
-						int same = 1;
-						for (int b = 0; b<8; ++b) {
-							if (chars[c*8+b]!=chr[b]) {
-								same = 0;
-								break;
-							}
-						}
-						if (same) { break; }
-					}
-					if (c==nunChars) {
-						if (nunChars < 256) {
-							for (int b = 0; b<8; ++b) { chars[c*8+b] = chr[b]; }
-							++nunChars;
-						} else { c = 0; }
-					}
+					int c = FindOrAddCharacter(chars, &nunChars, 256, chr);
 					screen[x+y*wc] = (uint8_t)c;
 					color[y*wc+x] = (uint8_t)fgc;
 				} else {
